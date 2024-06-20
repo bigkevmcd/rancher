@@ -43,6 +43,10 @@ const (
 	s3Endpoint                 = "s3.amazonaws.com"
 )
 
+var (
+	logger = log.WithFields(log.Fields{"controller": "etcd-backup"})
+)
+
 type Controller struct {
 	ctx                   context.Context
 	clusterClient         v3.ClusterInterface
@@ -105,7 +109,8 @@ func (c *Controller) Create(b *v3.EtcdBackup) (runtime.Object, error) {
 		return b, err
 	}
 
-	log.Infof("[etcd-backup] cluster [%s] backup added to queue: %s", cluster.Name, b.Name)
+	loggerForCluster(cluster, "queue", b.Name).
+		Info("Cluster cluster backup added to queue")
 
 	backups, err := c.getBackupsList(cluster)
 	if err != nil {
@@ -130,10 +135,14 @@ func (c *Controller) Remove(b *v3.EtcdBackup) (runtime.Object, error) {
 	if !rketypes.BackupConditionCreated.IsTrue(b) {
 		return b, nil
 	}
-	log.Debugf("[etcd-backup] deleting backup %s ", b.Name)
+	backupLogger := logger.WithFields(log.Fields{"backup": b.Name})
+
 	if err := c.etcdRemoveSnapshotWithBackoff(b); err != nil {
-		log.Errorf("[etcd-backup] unable to delete backup backup [%s]: %v", b.Name, err)
+		backupLogger.WithError(err).Error("Failed to delete backup")
+	} else {
+		backupLogger.Debug("Cluster Backup deleted")
 	}
+
 	return b, nil
 }
 
@@ -145,19 +154,22 @@ func (c *Controller) clusterBackupSync(ctx context.Context, interval time.Durati
 	for range ticker.Context(ctx, interval) {
 		clusters, err := c.clusterLister.List("", labels.NewSelector())
 		if err != nil {
-			log.Error(fmt.Errorf("[etcd-backup] error while listing clusters: %v", err))
+			logger.WithError(err).Error("Failed to list clusters")
 			return err
 		}
 		for _, cluster := range clusters {
-			log.Debugf("[etcd-backup] checking backups for cluster [%s]", cluster.Name)
+			clusterLogger := loggerForCluster(cluster)
+			clusterLogger.Debug("Checking backups for cluster")
 			if err = c.runWaitingBackups(cluster); err != nil {
-				log.Error(fmt.Errorf("[etcd-backup] error running waiting cluster backups for cluster [%s]: %v", cluster.Name, err))
+				clusterLogger.WithError(err).Error("Failed waiting for cluster backups for cluster")
 			}
 			if err = c.createRecurringBackup(cluster); err != nil {
-				log.Error(fmt.Errorf("[etcd-backup] error while syncing cluster backups for for cluster [%s]: %v", cluster.Name, err))
+				clusterLogger.WithError(err).Error("Failed to sync cluster backups")
 			}
+			clusterLogger.Debug("Completed checking backups for cluster")
 		}
 	}
+
 	return nil
 }
 
@@ -199,7 +211,8 @@ func (c *Controller) runWaitingBackups(cluster *v3.Cluster) error {
 
 	var next *v3.EtcdBackup
 	if next = nextBackup(backups); next != nil {
-		log.Infof("[etcd-backup] cluster [%s] backup starting from queue: %s", cluster.Name, next.Name)
+		loggerForCluster(cluster, "queue", next.Name).
+			Info("Cluster backup started")
 		if _, err := c.createBackupForCluster(next, cluster); err != nil {
 			return err
 		}
@@ -226,13 +239,16 @@ func (c *Controller) createRecurringBackup(cluster *v3.Cluster) error {
 	chronologicalSort(recurringBackups)
 
 	// cluster has no recurring backups, we need to create initial backup
+
+	clusterLogger := loggerForCluster(cluster)
 	if len(recurringBackups) == 0 {
-		log.Debugf("[etcd-backup] cluster [%s] has no backups, creating first backup", cluster.Name)
+		clusterLogger.Debug("Cluster has no backups, creating first backup")
 		newBackup, err := c.createNewBackup(cluster)
 		if err != nil {
 			return fmt.Errorf("error while creating backup for cluster [%s]: %v", cluster.Name, err)
 		}
-		log.Debugf("[etcd-backup] cluster [%s] new backup is created: %s", cluster.Name, newBackup.Name)
+		clusterLogger.WithFields(log.Fields{"new_backup": newBackup.Name}).
+			Debug("New backup created for cluster")
 		return nil
 	}
 
@@ -257,7 +273,8 @@ func (c *Controller) createRecurringBackup(cluster *v3.Cluster) error {
 		if err != nil {
 			return fmt.Errorf("error while create new backup for cluster [%s]: %v", cluster.Name, err)
 		}
-		log.Debugf("[etcd-backup] new backup created: %s", newBackup.Name)
+		clusterLogger.WithFields(log.Fields{"new_backup": newBackup.Name}).
+			Debug("New backup created for cluster")
 	}
 
 	return nil
@@ -308,7 +325,8 @@ func anyBackupsRunning(cluster *v3.Cluster, backups []*v3.EtcdBackup) bool {
 		// cluster backup is younger than its timeout and completion is unknown
 		// therefore, it's currently running
 		if time.Since(getBackupCreatedTime(backup)) < clusterTimeout && rketypes.BackupConditionCompleted.IsUnknown(backup) {
-			log.Debugf("[etcd-backup] cluster [%s] is currently creating a backup, skipping", cluster.Name)
+			loggerForCluster(cluster).
+				Debug("Cluster is currently creating a backup, skipping")
 			return true
 		}
 	}
@@ -377,7 +395,8 @@ func (c *Controller) etcdSave(b *v3.EtcdBackup) (*v3.EtcdBackup, error) {
 		}
 		// no need to retry, RKE will retry for us
 		if err = c.backupDriver.ETCDSave(c.ctx, cluster.Name, kontainerDriver, spec, snapshotName); err != nil {
-			log.Warnf("%v", err)
+			loggerForCluster(cluster, "snapshot", snapshotName).WithError(err).Warn("ETCD Snapshot failed")
+
 		}
 		return b, err
 	})
@@ -409,7 +428,8 @@ func (c *Controller) etcdRemoveSnapshotWithBackoff(b *v3.EtcdBackup) error {
 	snapshotName := clusterprovisioner.GetBackupFilename(b)
 	return wait.ExponentialBackoff(backoff, func() (bool, error) {
 		if inErr := c.backupDriver.ETCDRemoveSnapshot(c.ctx, cluster.Name, kontainerDriver, spec, snapshotName); inErr != nil {
-			log.Warnf("%v", inErr)
+			loggerForCluster(cluster, "snapshot", snapshotName).
+				WithError(err).Warn("Failed to remove ETCD Snapshot")
 			return false, nil
 		}
 		return true, nil
@@ -417,7 +437,7 @@ func (c *Controller) etcdRemoveSnapshotWithBackoff(b *v3.EtcdBackup) error {
 }
 
 func (c *Controller) rotateSuccessfulBackups(cluster *v3.Cluster) error {
-	log.Infof("[etcd-backup] Rotating successful recurring backups")
+	loggerForCluster(cluster).Info("Rotating successful recurring backups")
 	return c.rotateBackups(cluster, IsBackupCompleted)
 }
 
@@ -426,7 +446,7 @@ func IsBackupCompleted(backup *v3.EtcdBackup) bool {
 }
 
 func (c *Controller) rotateFailedBackups(cluster *v3.Cluster) error {
-	log.Infof("[etcd-backup] Rotating failed recurring backups")
+	loggerForCluster(cluster).Info("Rotating failed recurring backups")
 	return c.rotateBackups(cluster, IsBackupFailed)
 }
 
@@ -701,4 +721,25 @@ func getCustomCATransport(tr http.RoundTripper, ca string) http.RoundTripper {
 		RootCAs: certPool,
 	}
 	return tr
+}
+
+func loggerForCluster(cluster *v3.Cluster, extras ...any) *log.Entry {
+	return logger.WithFields(log.Fields{"cluster": cluster.Name}).WithFields(sliceToMap(extras))
+}
+
+func sliceToMap(elems ...any) map[string]any {
+	result := map[string]any{}
+	count := len(elems)
+
+	var i int
+	for i < count {
+		if i+2 <= count {
+			result[fmt.Sprintf("%v", elems[i])] = elems[i+1]
+		} else {
+			result[fmt.Sprintf("%v", elems[i])] = ""
+		}
+		i += 2
+	}
+
+	return result
 }
