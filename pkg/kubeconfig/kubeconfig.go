@@ -117,6 +117,14 @@ func ForTokenBased(clusterName, clusterID, host, token string) (string, error) {
 	return buf.String(), err
 }
 
+// ForClusterTokenBased returns a Kubeconfig YAML document that references the provided
+// cluster and host details.
+//
+// The clusterID is only used if the cluster.Name is empty.
+//
+// If the Cluster is configured for Automated Cluster Endpoint i.e. has a
+// LocalClusterAuthEndpoint.FQDN then the KubeConfig will be generated with two
+// contexts, and the -fqdn one will reference the ACE endpoint.
 func ForClusterTokenBased(cluster *managementv3.Cluster, nodes []*mgmtv3.Node, clusterID, host, token string) (string, error) {
 	clusterName := cluster.Name
 	if clusterName == "" {
