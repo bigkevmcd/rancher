@@ -41,7 +41,7 @@ type AzureADConfig struct {
 	Enabled               bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	Endpoint              string            `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
 	GraphEndpoint         string            `json:"graphEndpoint,omitempty" yaml:"graphEndpoint,omitempty"`
-	GroupMembershipFilter string            `json:"groupMembershipFilter,omitempty" yaml:"groupMembershipFilter,omitempty"`
+	GroupMembershipFilter string            `json:"groupMembershipFilter" yaml:"groupMembershipFilter"`
 	Labels                map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	LogoutAllSupported    bool              `json:"logoutAllSupported,omitempty" yaml:"logoutAllSupported,omitempty"`
 	Name                  string            `json:"name,omitempty" yaml:"name,omitempty"`
