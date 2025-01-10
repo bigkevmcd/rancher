@@ -350,6 +350,8 @@ type RoleTemplate struct {
 
 	// Administrative if false, and context is set to cluster this RoleTemplate will not grant access to "CatalogTemplates" and "CatalogTemplateVersions" for any project in the cluster.
 	// Default is false.
+	//
+	// Deprecated: This field is no longer used.
 	// +optional
 	Administrative bool `json:"administrative,omitempty"`
 }
