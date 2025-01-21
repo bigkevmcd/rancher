@@ -40,13 +40,18 @@ type tokensManager interface {
 	UserAttributeCreateOrUpdate(userID, provider string, groupPrincipals []v3.Principal, userExtraInfo map[string][]string, loginTime ...time.Time) error
 }
 
+type userManager interface {
+	CheckAccess(accessMode string, allowedPrincipalIDs []string, userPrincipalID string, groups []v3.Principal) (bool, error)
+	SetPrincipalOnCurrentUser(apiContext *types.APIContext, principal v3.Principal) (*v3.User, error)
+}
+
 type ghProvider struct {
 	ctx          context.Context
 	authConfigs  v3.AuthConfigInterface
 	secrets      wcorev1.SecretController
 	getConfig    func() (*v32.GithubConfig, error)
 	githubClient *GClient
-	userMGR      user.Manager
+	userMGR      userManager
 	tokenMGR     tokensManager
 }
 
@@ -78,6 +83,16 @@ func (g *ghProvider) Logout(apiContext *types.APIContext, token accessor.TokenAc
 
 func (g *ghProvider) GetName() string {
 	return Name
+}
+
+func (g *ghProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	config, err := g.getConfig()
+	if err != nil {
+		logrus.Errorf("Error fetching github config: %v", err)
+		return false, err
+	}
+
+	return !config.TeamSyncDisabled, nil
 }
 
 func (g *ghProvider) CustomizeSchema(schema *types.Schema) {
