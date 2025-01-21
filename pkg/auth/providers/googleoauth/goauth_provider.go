@@ -246,6 +246,10 @@ func (g *googleOauthProvider) GetName() string {
 	return Name
 }
 
+func (g *googleOauthProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	return true, nil
+}
+
 func (g *googleOauthProvider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = g.actionHandler
 	schema.Formatter = g.formatter

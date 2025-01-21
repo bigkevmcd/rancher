@@ -712,6 +712,10 @@ func (p *mockLocalProvider) CleanupResources(*v3.AuthConfig) error {
 	return nil
 }
 
+func (p *mockLocalProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	panic("not implemented")
+}
+
 type mockShibbolethProvider struct {
 	enabled    bool
 	enabledErr error
@@ -770,4 +774,8 @@ func (p *mockShibbolethProvider) GetUserExtraAttributes(userPrincipal v3.Princip
 
 func (p *mockShibbolethProvider) CleanupResources(*v3.AuthConfig) error {
 	return nil
+}
+
+func (p *mockShibbolethProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	panic("not implemented")
 }
