@@ -101,6 +101,10 @@ func (p *fakeProvider) CanAccessWithGroupProviders(userPrincipalID string, group
 	panic("not implemented")
 }
 
+func (p *fakeProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	return false, nil
+}
+
 func (p *fakeProvider) GetUserExtraAttributes(userPrincipal v3.Principal) map[string][]string {
 	if p.getUserExtraAttributesFunc != nil {
 		return p.getUserExtraAttributesFunc(userPrincipal)

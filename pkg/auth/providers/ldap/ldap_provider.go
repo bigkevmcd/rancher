@@ -120,6 +120,10 @@ func (p *ldapProvider) GetName() string {
 	return p.providerName
 }
 
+func (l *ldapProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	return true, nil
+}
+
 func (p *ldapProvider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = p.actionHandler
 	schema.Formatter = p.formatter

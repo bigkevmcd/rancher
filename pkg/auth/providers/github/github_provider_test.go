@@ -519,6 +519,44 @@ func TestRefetchGroupPrincipals(t *testing.T) {
 	require.Equal(t, want, principals)
 }
 
+func TestRefetchGroupPrincipalsEnabled(t *testing.T) {
+	enabledTests := map[string]struct {
+		config *v32.GithubConfig
+		want   bool
+	}{
+		"when the team sync is disabled": {
+			config: &v32.GithubConfig{
+				TeamSyncDisabled: true,
+			},
+			want: false,
+		},
+		"when the team sync is enabled": {
+			config: &v32.GithubConfig{
+				TeamSyncDisabled: false,
+			},
+			want: true,
+		},
+	}
+
+	for name, tt := range enabledTests {
+		t.Run(name, func(t *testing.T) {
+			provider := ghProvider{
+				ctx:       context.TODO(),
+				getConfig: func() (*v32.GithubConfig, error) { return tt.config, nil },
+			}
+
+			v, err := provider.RefetchGroupPrincipalsEnabled()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if v != tt.want {
+				t.Fatalf("RefetchGroupPrincipalsEnabled() got %v, want %v", v, tt.want)
+			}
+		})
+	}
+
+}
+
 type fakeGithubData struct {
 	userOrgs, userTeams []byte
 }
