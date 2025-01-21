@@ -131,6 +131,10 @@ func (p *mockLdapProvider) GetName() string {
 	return p.providerName
 }
 
+func (p *mockLdapProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	panic("not implemented")
+}
+
 func (p *mockLdapProvider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
 	panic("AuthenticateUser Unimplemented!")
 }

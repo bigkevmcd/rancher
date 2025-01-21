@@ -81,6 +81,10 @@ func (l *Provider) GetName() string {
 	return Name
 }
 
+func (l *Provider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	return true, nil
+}
+
 func (l *Provider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = l.actionHandler
 }
