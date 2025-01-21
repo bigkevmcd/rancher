@@ -79,6 +79,16 @@ func (g *ghProvider) GetName() string {
 	return Name
 }
 
+func (g *ghProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	config, err := g.getConfig()
+	if err != nil {
+		logrus.Errorf("Error fetching github config: %v", err)
+		return false, err
+	}
+
+	return !config.TeamSyncDisabled, nil
+}
+
 func (g *ghProvider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = g.actionHandler
 	schema.Formatter = g.formatter
