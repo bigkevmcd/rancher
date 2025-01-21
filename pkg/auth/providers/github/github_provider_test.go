@@ -14,6 +14,7 @@ import (
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -422,4 +423,129 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	if found[0].LoginName != "developer" {
 		t.Errorf("Unexpected principal %s", found[0].LoginName)
 	}
+}
+
+func TestRefetchGroupPrincipalsWhenDisabled(t *testing.T) {
+	srv := startFakeGithubServer(t, fakeGithubData{})
+	srvURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := &v32.GithubConfig{
+		TeamSyncDisabled: true,
+		Hostname:         srvURL.Host,
+	}
+
+	provider := ghProvider{
+		ctx:          context.Background(),
+		githubClient: &GClient{httpClient: srv.Client()},
+		getConfig:    func() (*v32.GithubConfig, error) { return config, nil },
+		tokenMGR:     &fakeTokensManager{},
+	}
+
+	principals, err := provider.RefetchGroupPrincipals("test", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Empty(t, principals)
+}
+
+func TestRefetchGroupPrincipals(t *testing.T) {
+	srv := startFakeGithubServer(t, fakeGithubData{
+		userOrgs: []byte(`
+	[{
+		"id": 9343010,
+		"login": "devorg",
+		"avatar_url": "https://github.com/u/9343010/avatar"
+	}]`),
+		userTeams: []byte(`
+[
+  {
+    "id": 1,
+    "html_url": "https://github.com/orgs/github/teams/justice-league",
+    "name": "Justice League",
+    "organization": {
+      "login": "github",
+      "id": 1,
+      "avatar_url": "https://github.com/images/error/octocat_happy.gif"
+	}
+  }
+]`),
+	})
+	srvURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := &v32.GithubConfig{
+		Hostname: srvURL.Host,
+	}
+
+	provider := ghProvider{
+		ctx:          context.Background(),
+		githubClient: &GClient{httpClient: srv.Client()},
+		getConfig:    func() (*v32.GithubConfig, error) { return config, nil },
+		tokenMGR:     &fakeTokensManager{},
+	}
+
+	principals, err := provider.RefetchGroupPrincipals("test", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []v3.Principal{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "github_org://9343010",
+			},
+			Provider:       "github",
+			PrincipalType:  "group",
+			DisplayName:    "devorg",
+			LoginName:      "devorg",
+			ProfilePicture: "https://github.com/u/9343010/avatar",
+			MemberOf:       true,
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "github_team://1",
+			},
+			Provider:       "github",
+			PrincipalType:  "group",
+			DisplayName:    "Justice League",
+			ProfilePicture: "https://github.com/images/error/octocat_happy.gif",
+			MemberOf:       true,
+		},
+	}
+	require.Equal(t, want, principals)
+}
+
+type fakeGithubData struct {
+	userOrgs, userTeams []byte
+}
+
+func startFakeGithubServer(t *testing.T, data fakeGithubData) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch path := r.URL.Path; path {
+		case "/api/v3/user/orgs":
+			if data.userOrgs != nil {
+				w.Write(data.userOrgs)
+			} else {
+				http.Error(w, "userOrgs is not populated", http.StatusBadRequest)
+			}
+		case "/api/v3/user/teams":
+			if data.userTeams != nil {
+				w.Write(data.userTeams)
+			} else {
+				http.Error(w, "userTeams is not populated", http.StatusBadRequest)
+			}
+		default:
+			t.Errorf("Unexpected client call %s", path)
+		}
+	}))
+
+	t.Cleanup(func() {
+		srv.Close()
+	})
+
+	return srv
 }

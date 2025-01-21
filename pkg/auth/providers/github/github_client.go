@@ -107,6 +107,7 @@ func (g *GClient) getTeams(githubAccessToken string, config *v32.GithubConfig) (
 		logrus.Errorf("Github getGithubTeams: GET url %v received error from github, err: %v", url, err)
 		return teams, err
 	}
+
 	for _, response := range responses {
 		teamObjs, err := g.getTeamInfo(response, config)
 
@@ -166,13 +167,13 @@ func (g *GClient) getOrgTeamInfo(b []byte, config *v32.GithubConfig, org Account
 }
 
 func (g *GClient) getTeamInfo(b []byte, config *v32.GithubConfig) ([]Account, error) {
-	var teams []Account
 	var teamObjs []Team
 	if err := json.Unmarshal(b, &teamObjs); err != nil {
 		logrus.Errorf("Github getTeamInfo: received error unmarshalling team array, err: %v", err)
-		return teams, err
+		return nil, err
 	}
 
+	var teams []Account
 	url := g.getURL("TEAM_PROFILE", config)
 	for _, team := range teamObjs {
 		teamAcct := Account{}
