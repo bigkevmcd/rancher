@@ -318,6 +318,8 @@ type GithubConfig struct {
 	ClientID     string `json:"clientId,omitempty" norman:"required"`
 	ClientSecret string `json:"clientSecret,omitempty" norman:"required,type=password"`
 
+	TeamSyncDisabled bool `json:"teamSyncDisabled" norman:"default=false"`
+
 	// AdditionalClientIDs is a map of clientID to client secrets
 	AdditionalClientIDs map[string]string `json:"additionalClientIds,omitempty" norman:"nocreate,noupdate"`
 	HostnameToClientID  map[string]string `json:"hostnameToClientId,omitempty" norman:"nocreate,noupdate"`

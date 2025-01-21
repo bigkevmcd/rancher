@@ -249,20 +249,30 @@ func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, c
 	return userPrincipal, groupPrincipals, accessToken, nil
 }
 
+// RefetchGroupPrincipals queries GitHub for all the Organizations a user is a
+// member of and then queries the teams that the user is a member of.
+//
+// It then returns a set of Principals representing the orgs and teams for the
+// user.
+//
+// If the GitHub config has TeamSyncDisabled then no Principals will be returned.
 func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) ([]v3.Principal, error) {
-	var groupPrincipals []v3.Principal
-	var err error
-	var config *v32.GithubConfig
-
-	config, err = g.getConfig()
+	config, err := g.getConfig()
 	if err != nil {
 		return nil, err
+	}
+
+	if config.TeamSyncDisabled {
+		logrus.Debugf("team sync is disabled - not refreshing group principals for %s", principalID)
+		return nil, nil
 	}
 
 	orgAccts, err := g.githubClient.getOrgs(secret, config)
 	if err != nil {
 		return nil, err
 	}
+
+	var groupPrincipals []v3.Principal
 	for _, orgAcct := range orgAccts {
 		groupPrincipal := g.toPrincipal(orgType, orgAcct, nil)
 		groupPrincipal.MemberOf = true
@@ -273,6 +283,7 @@ func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) (
 	if err != nil {
 		return nil, err
 	}
+
 	for _, teamAcct := range teamAccts {
 		groupPrincipal := g.toPrincipal(teamType, teamAcct, nil)
 		groupPrincipal.MemberOf = true
