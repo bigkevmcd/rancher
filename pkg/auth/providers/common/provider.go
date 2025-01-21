@@ -30,6 +30,10 @@ type AuthProvider interface {
 	GetUserExtraAttributes(userPrincipal v3.Principal) map[string][]string
 	IsDisabledProvider() (bool, error)
 
+	// RefetchGroupPrincipalsEnabled implementations return true if this
+	// provider is configured to keep groups in sync with the provider.
+	RefetchGroupPrincipalsEnabled() (bool, error)
+
 	// LogoutAll implements the "logout-all" action for the provider, if supported. If
 	// "logout-all" is not supported do nothing and return nil.
 	LogoutAll(apiContext *types.APIContext, token *v3.Token) error
