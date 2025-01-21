@@ -20,6 +20,7 @@ const (
 	GithubConfigFieldRemoved             = "removed"
 	GithubConfigFieldStatus              = "status"
 	GithubConfigFieldTLS                 = "tls"
+	GithubConfigFieldTeamSyncDisabled    = "teamSyncDisabled"
 	GithubConfigFieldType                = "type"
 	GithubConfigFieldUUID                = "uuid"
 )
@@ -43,6 +44,7 @@ type GithubConfig struct {
 	Removed             string            `json:"removed,omitempty" yaml:"removed,omitempty"`
 	Status              *AuthConfigStatus `json:"status,omitempty" yaml:"status,omitempty"`
 	TLS                 bool              `json:"tls,omitempty" yaml:"tls,omitempty"`
+	TeamSyncDisabled    bool              `json:"teamSyncDisabled,omitempty" yaml:"teamSyncDisabled,omitempty"`
 	Type                string            `json:"type,omitempty" yaml:"type,omitempty"`
 	UUID                string            `json:"uuid,omitempty" yaml:"uuid,omitempty"`
 }
