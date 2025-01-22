@@ -385,6 +385,36 @@ func Test_refreshAttributes(t *testing.T) {
 			deleted:               false,
 			enabled:               true,
 		},
+		{
+			name: "refreshing github teams when disabled",
+			user: &v3.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "user-abcde"},
+				Username:   "octocat",
+				PrincipalIDs: []string{
+					"github_user://12345687",
+				},
+			},
+			attribs: &v3.UserAttribute{
+				ObjectMeta:      metav1.ObjectMeta{Name: "user-abcde"},
+				GroupPrincipals: map[string]v3.Principals{},
+				ExtraByProvider: map[string]map[string][]string{},
+			},
+			tokens: []*v3.Token{},
+			want: &v3.UserAttribute{
+				ObjectMeta: metav1.ObjectMeta{Name: "user-abcde"},
+				GroupPrincipals: map[string]v3.Principals{
+					"local": v3.Principals{},
+				},
+				ExtraByProvider: map[string]map[string][]string{
+					providers.GithubProvider: map[string][]string{
+						common.UserAttributePrincipalID: []string{"local://user-abcde"},
+						common.UserAttributeUserName:    []string{"admin"},
+					},
+				},
+			},
+			deleted: false,
+			enabled: true,
+		},
 	}
 
 	providers.ProviderNames = map[string]bool{
