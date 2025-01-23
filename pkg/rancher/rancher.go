@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -630,7 +629,6 @@ func migrateEncryptionConfig(ctx context.Context, restConfig *rest.Config) error
 }
 
 func applyAllMigrations(ctx context.Context, cfg *rest.Config) error {
-
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return err
@@ -646,11 +644,6 @@ func applyAllMigrations(ctx context.Context, cfg *rest.Config) error {
 	applied, err := migrations.ApplyUnappliedMigrations(ctx, migrations.NewStatusClient(clientset.CoreV1()), dynClient, descriptive.ApplyOptions{}, mapper)
 	if err != nil {
 		return fmt.Errorf("applying all migrations on startup: %w", err)
-	}
-
-	// TODO: Fix this
-	for migration, metrics := range applied {
-		log.Printf("Migration %s applied %#v", migration, metrics)
 	}
 
 	return nil
