@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -724,11 +723,6 @@ func applyAllMigrations(ctx context.Context, cfg *rest.Config) error {
 	applied, err := migrations.ApplyUnappliedMigrations(ctx, migrations.NewStatusClient(clientset.CoreV1()), dynClient, descriptive.ApplyOptions{}, mapper)
 	if err != nil {
 		return fmt.Errorf("applying all migrations on startup: %w", err)
-	}
-
-	// TODO: Fix this
-	for migration, metrics := range applied {
-		log.Printf("Migration %s applied %#v", migration, metrics)
 	}
 
 	return nil
