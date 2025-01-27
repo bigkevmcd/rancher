@@ -204,47 +204,8 @@ func (r *refresher) refreshAttributes(attribs *v3.UserAttribute) (*v3.UserAttrib
 
 		// If there is no principalID for the provider, there is no reason to go through the refetch process
 		if principalID != "" {
-			secret := ""
-			hasPerUserSecrets, err := providers.ProviderHasPerUserSecrets(providerName)
-			if err != nil {
+			if err := r.refetchPrincipals(providerName); err != nil {
 				return nil, err
-			}
-			if hasPerUserSecrets {
-				secret, err = r.tokenMGR.GetSecret(user.Name, providerName, loginTokens[providerName])
-				if apierrors.IsNotFound(err) {
-					// There is no secret so we can't refresh, just continue to the next attribute
-					return attribs, nil
-				}
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			// SAML cannot refresh, so we do restore the existing providers.
-			if providers.UnrefreshableProviders[providerName] {
-				existingPrincipals := attribs.GroupPrincipals[providerName].Items
-				if existingPrincipals != nil {
-					newGroupPrincipals = existingPrincipals
-				}
-			} else {
-				newGroupPrincipals, err = providers.RefetchGroupPrincipals(principalID, providerName, secret)
-				if err != nil {
-					// In the case that we cant access a server, we still want to continue refreshing, but
-					// we no longer want to disable derived tokens, or remove their login tokens for this provider
-					if err.Error() != "no access" {
-						errorConfirmingLogins = true
-						logrus.Warnf("Error refreshing token principals, skipping: %v", err)
-						existingPrincipals := attribs.GroupPrincipals[providerName].Items
-						if existingPrincipals != nil {
-							newGroupPrincipals = existingPrincipals
-						}
-					} else {
-						// In the case that the user explicitly cannot login at all to this provider
-						// (e.g. they no longer exist) we pretend they have no principal with this provider
-						// so that their login tokens get blanked out
-						principalID = ""
-					}
-				}
 			}
 		}
 
@@ -321,6 +282,51 @@ func (r *refresher) refreshAttributes(attribs *v3.UserAttribute) (*v3.UserAttrib
 		}
 	}
 	return attribs, err
+}
+
+func (r *refresher) refetchPrincipals(providerName string) error {
+	secret := ""
+	hasPerUserSecrets, err := providers.ProviderHasPerUserSecrets(providerName)
+	if err != nil {
+		return nil, err
+	}
+	if hasPerUserSecrets {
+		secret, err = r.tokenMGR.GetSecret(user.Name, providerName, loginTokens[providerName])
+		if apierrors.IsNotFound(err) {
+			// There is no secret so we can't refresh, just continue to the next attribute
+			return attribs, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// SAML cannot refresh, so we do restore the existing providers.
+	if providers.UnrefreshableProviders[providerName] {
+		existingPrincipals := attribs.GroupPrincipals[providerName].Items
+		if existingPrincipals != nil {
+			newGroupPrincipals = existingPrincipals
+		}
+	} else {
+		newGroupPrincipals, err = providers.RefetchGroupPrincipals(principalID, providerName, secret)
+		if err != nil {
+			// In the case that we cant access a server, we still want to continue refreshing, but
+			// we no longer want to disable derived tokens, or remove their login tokens for this provider
+			if err.Error() != "no access" {
+				errorConfirmingLogins = true
+				logrus.Warnf("Error refreshing token principals, skipping: %v", err)
+				existingPrincipals := attribs.GroupPrincipals[providerName].Items
+				if existingPrincipals != nil {
+					newGroupPrincipals = existingPrincipals
+				}
+			} else {
+				// In the case that the user explicitly cannot login at all to this provider
+				// (e.g. they no longer exist) we pretend they have no principal with this provider
+				// so that their login tokens get blanked out
+				principalID = ""
+			}
+		}
+	}
 }
 
 func GetPrincipalIDForProvider(providerName string, user *v3.User) string {
