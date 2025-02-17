@@ -9,9 +9,10 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/rancher/norman/types"
+	normantypes "github.com/rancher/norman/types"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGitHubProvider(t *testing.T) {
@@ -49,9 +50,9 @@ func TestGitHubProvider(t *testing.T) {
 		githubClient: &GClient{httpClient: srv.Client()},
 		ctx:          context.Background(),
 		getConfig:    func() (*v32.GithubConfig, error) { return &config, nil },
+		saveConfig:   func(*v32.GithubConfig) error { return nil },
 		tokenMGR:     fakeTokens,
-		userMGR:      stubUserManager{true},
-		authConfigs:  stubAuthConfigs{},
+		userMGR:      stubUserManager{hasAccess: true, username: "testing"},
 	}
 
 	input := &v32.GithubConfigApplyInput{
@@ -60,7 +61,8 @@ func TestGitHubProvider(t *testing.T) {
 		Enabled:      true,
 	}
 	httpReq := httptest.NewRequest(http.MethodGet, "/not-used", jsonReader(t, input))
-	req := &types.APIContext{Request: httpReq}
+	req := &normantypes.APIContext{Request: httpReq}
+
 	if err := provider.testAndApply(req); err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +79,7 @@ func jsonReader(t *testing.T, v any) *bytes.Buffer {
 }
 
 type stubUserManager struct {
+	username  string
 	hasAccess bool
 }
 
@@ -84,9 +87,6 @@ func (m stubUserManager) CheckAccess(accessMode string, allowedPrincipalIDs []st
 	return m.hasAccess, nil
 }
 
-func (m stubUserManager) SetPrincipalOnCurrentUser(apiContext *types.APIContext, principal v3.Principal) (*v3.User, error) {
-	return nil, nil
-}
-
-type stubAuthConfigs struct {
+func (m stubUserManager) SetPrincipalOnCurrentUser(apiContext *normantypes.APIContext, principal v3.Principal) (*v3.User, error) {
+	return &v3.User{ObjectMeta: metav1.ObjectMeta{Name: m.username}}, nil
 }
