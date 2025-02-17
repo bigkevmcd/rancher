@@ -127,7 +127,7 @@ func (g *ghProvider) testAndApply(request *types.APIContext) error {
 	}
 
 	githubConfig.Enabled = githubConfigApplyInput.Enabled
-	err = g.saveGithubConfig(&githubConfig)
+	err = g.saveConfig(&githubConfig)
 	if err != nil {
 		return httperror.NewAPIError(httperror.ServerError, fmt.Sprintf("Failed to save github config: %v", err))
 	}
