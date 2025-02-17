@@ -50,6 +50,7 @@ type ghProvider struct {
 	authConfigs  v3.AuthConfigInterface
 	secrets      wcorev1.SecretController
 	getConfig    func() (*v32.GithubConfig, error)
+	saveConfig   func(*v32.GithubConfig) error
 	githubClient *GClient
 	userMGR      userManager
 	tokenMGR     tokensManager
@@ -69,6 +70,7 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 		tokenMGR:     tokenMGR,
 	}
 	provider.getConfig = provider.getGithubConfigCR
+	provider.saveConfig = provider.saveGithubConfig
 
 	return provider
 }
