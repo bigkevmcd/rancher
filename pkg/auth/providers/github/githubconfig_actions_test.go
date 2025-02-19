@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/rancher/norman/types"
 	normantypes "github.com/rancher/norman/types"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
@@ -37,35 +38,132 @@ func TestGitHubProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fakeTokens := &fakeTokensManager{
-		isMemberOfFunc: func(token v3.Token, group v3.Principal) bool {
-			return true
-		},
-	}
-	config := v32.GithubConfig{
-		Hostname: srvURL.Host,
-	}
+	t.Run("testAndApply when team sync is not disabled", func(t *testing.T) {
+		fakeTokens := &fakeTokensManager{
+			isMemberOfFunc: func(token v3.Token, group v3.Principal) bool {
+				return true
+			},
+			createTokenAndSetCookieFunc: func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
+				if providerToken != "this-is-a-test-token" {
+					t.Errorf("got provider token %v, want %v", providerToken, "this-is-a-test-token")
+				}
+				return nil
+			},
+		}
 
-	provider := ghProvider{
-		githubClient: &GClient{httpClient: srv.Client()},
-		ctx:          context.Background(),
-		getConfig:    func() (*v32.GithubConfig, error) { return &config, nil },
-		saveConfig:   func(*v32.GithubConfig) error { return nil },
-		tokenMGR:     fakeTokens,
-		userMGR:      stubUserManager{hasAccess: true, username: "testing"},
-	}
+		config := v32.GithubConfig{
+			Hostname: srvURL.Host,
+		}
 
-	input := &v32.GithubConfigApplyInput{
-		GithubConfig: config,
-		Code:         "testing",
-		Enabled:      true,
-	}
-	httpReq := httptest.NewRequest(http.MethodGet, "/not-used", jsonReader(t, input))
-	req := &normantypes.APIContext{Request: httpReq}
+		provider := ghProvider{
+			githubClient: &GClient{httpClient: srv.Client()},
+			ctx:          context.Background(),
+			getConfig:    func() (*v32.GithubConfig, error) { return &config, nil },
+			saveConfig:   func(*v32.GithubConfig) error { return nil },
+			tokenMGR:     fakeTokens,
+			userMGR:      stubUserManager{hasAccess: true, username: "testing"},
+		}
 
-	if err := provider.testAndApply(req); err != nil {
-		t.Fatal(err)
-	}
+		input := &v32.GithubConfigApplyInput{
+			GithubConfig: config,
+			Code:         "testing",
+			Enabled:      true,
+		}
+		httpReq := httptest.NewRequest(http.MethodGet, "/not-used", jsonReader(t, input))
+		req := &normantypes.APIContext{Request: httpReq}
+
+		if err := provider.testAndApply(req); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("testAndApply when team sync is disabled", func(t *testing.T) {
+		fakeTokens := &fakeTokensManager{
+			isMemberOfFunc: func(token v3.Token, group v3.Principal) bool {
+				return true
+			},
+			createTokenAndSetCookieFunc: func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
+				if providerToken != "" {
+					t.Error("got provider token when it should be empty")
+				}
+				return nil
+			},
+		}
+
+		config := v32.GithubConfig{
+			Hostname:         srvURL.Host,
+			TeamSyncDisabled: true,
+		}
+
+		provider := ghProvider{
+			githubClient: &GClient{httpClient: srv.Client()},
+			ctx:          context.Background(),
+			getConfig:    func() (*v32.GithubConfig, error) { return &config, nil },
+			saveConfig:   func(*v32.GithubConfig) error { return nil },
+			tokenMGR:     fakeTokens,
+			userMGR:      stubUserManager{hasAccess: true, username: "testing"},
+		}
+
+		input := &v32.GithubConfigApplyInput{
+			GithubConfig: config,
+			Code:         "testing",
+			Enabled:      true,
+		}
+		httpReq := httptest.NewRequest(http.MethodGet, "/not-used", jsonReader(t, input))
+		req := &normantypes.APIContext{Request: httpReq}
+
+		if err := provider.testAndApply(req); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("LoginUser when team sync is not disabled", func(t *testing.T) {
+		config := &v32.GithubConfig{
+			Hostname: srvURL.Host,
+		}
+
+		provider := ghProvider{
+			githubClient: &GClient{httpClient: srv.Client()},
+			ctx:          context.Background(),
+			getConfig:    func() (*v32.GithubConfig, error) { return config, nil },
+			saveConfig:   func(*v32.GithubConfig) error { return nil },
+			userMGR:      stubUserManager{hasAccess: true, username: "testing"},
+		}
+
+		_, _, token, err := provider.LoginUser("", &v32.GithubLogin{}, config, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if token != "this-is-a-test-token" {
+			t.Errorf("got provider token %v, want %v", token, "this-is-a-test-token")
+		}
+	})
+
+	t.Run("LoginUser when team sync is disabled", func(t *testing.T) {
+		config := &v32.GithubConfig{
+			Hostname:         srvURL.Host,
+			TeamSyncDisabled: true,
+		}
+
+		provider := ghProvider{
+			githubClient: &GClient{httpClient: srv.Client()},
+			ctx:          context.Background(),
+			getConfig:    func() (*v32.GithubConfig, error) { return config, nil },
+			saveConfig:   func(*v32.GithubConfig) error { return nil },
+			tokenMGR:     nil,
+			userMGR:      stubUserManager{hasAccess: true, username: "testing"},
+		}
+
+		_, _, token, err := provider.LoginUser("", &v32.GithubLogin{}, config, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if token != "" {
+			t.Errorf("got provider token when it should be empty: %v", token)
+		}
+	})
 }
 
 func jsonReader(t *testing.T, v any) *bytes.Buffer {

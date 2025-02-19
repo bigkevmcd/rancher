@@ -16,7 +16,7 @@ import (
 	"github.com/rancher/rancher/pkg/auth/accessor"
 	"github.com/rancher/rancher/pkg/auth/providers/common"
 	"github.com/rancher/rancher/pkg/auth/tokens"
-	util2 "github.com/rancher/rancher/pkg/auth/util"
+	"github.com/rancher/rancher/pkg/auth/util"
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
 	publicclient "github.com/rancher/rancher/pkg/client/generated/management/v3public"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
@@ -177,9 +177,9 @@ func (g *ghProvider) AuthenticateUser(ctx context.Context, input interface{}) (v
 		return v3.Principal{}, nil, "", errors.New("unexpected input type")
 	}
 	host := ""
-	req, ok := ctx.Value(util2.RequestKey).(*http.Request)
+	req, ok := ctx.Value(util.RequestKey).(*http.Request)
 	if ok {
-		host = util2.GetHost(req)
+		host = util.GetHost(req)
 	}
 	return g.LoginUser(host, login, nil, false)
 }
@@ -263,7 +263,12 @@ func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, c
 		return v3.Principal{}, nil, "", httperror.NewAPIError(httperror.Unauthorized, "unauthorized")
 	}
 
-	return userPrincipal, groupPrincipals, accessToken, nil
+	var oidcAuthToken string
+	if !config.TeamSyncDisabled {
+		oidcAuthToken = accessToken
+	}
+
+	return userPrincipal, groupPrincipals, oidcAuthToken, nil
 }
 
 // RefetchGroupPrincipals queries GitHub for all the Organizations a user is a
