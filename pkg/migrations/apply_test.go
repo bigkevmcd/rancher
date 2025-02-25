@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"testing"
 	"time"
 
@@ -311,6 +310,34 @@ func TestApplyUnappliedMigrations(t *testing.T) {
 			t.Errorf("failed calculate metrics: diff -want +got\n%s", diff)
 		}
 	})
+
+	t.Run("with background migration", func(t *testing.T) {
+		Register(testMigration{true})
+		t.Cleanup(func() {
+			knownMigrations = nil
+		})
+		svc := test.NewService(func(s *corev1.Service) {
+			s.Spec.Ports[0].TargetPort = intstr.FromInt(8000)
+		})
+		clientset := fake.NewClientset()
+		dynamicset := newFakeDynamicClient(t, svc)
+
+		wg, err := ApplyUnappliedMigrationsInBackground(context.TODO(), NewStatusClient(clientset.CoreV1()), dynamicset, changes.ApplyOptions{}, nil)
+		require.NoError(t, err)
+		wg.Wait()
+
+		wantSpec := corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http-80",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       80,
+					TargetPort: intstr.FromInt(9371)},
+			},
+		}
+		updatedSvc := loadService(t, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, dynamicset)
+		require.Equal(t, wantSpec, updatedSvc.Spec)
+	})
 }
 
 func TestNameForMigration(t *testing.T) {
@@ -331,7 +358,10 @@ func TestNameForMigration(t *testing.T) {
 }
 
 type testMigration struct {
+	background bool
 }
+
+func (m testMigration) BackgroundSafe() bool { return m.background }
 
 func (t testMigration) Name() string {
 	return "test-migration"
@@ -370,6 +400,10 @@ func (t testMigration) Changes(ctx context.Context, _ changes.Interface, _ Migra
 type testFailingMigration struct {
 }
 
+func (testFailingMigration) BackgroundSafe() bool {
+	return false
+}
+
 func (t testFailingMigration) Name() string {
 	return "test-failing-migration"
 }
@@ -380,6 +414,8 @@ func (t testFailingMigration) Changes(ctx context.Context, _ changes.Interface, 
 
 type testDeleteMigration struct {
 }
+
+func (testDeleteMigration) BackgroundSafe() bool { return false }
 
 func (t testDeleteMigration) Name() string {
 	return "test-delete-migration"
@@ -413,6 +449,8 @@ func (t testDeleteMigration) Changes(ctx context.Context, _ changes.Interface, _
 type testCreateMigration struct {
 	t *testing.T
 }
+
+func (testCreateMigration) BackgroundSafe() bool { return false }
 
 func (m testCreateMigration) Name() string {
 	return "test-create-migration"
@@ -450,6 +488,8 @@ func (m testContinueMigration) Name() string {
 	return "continue-migration"
 }
 
+func (testContinueMigration) BackgroundSafe() bool { return false }
+
 // Changes implements the Migration interface.
 //
 // It will return a continue value twice.
@@ -463,8 +503,6 @@ func (m testContinueMigration) Changes(ctx context.Context, client changes.Inter
 			return nil, err
 		}
 	}
-
-	log.Printf("migrationContinue = %#v", migrationContinue)
 
 	svc := test.NewService(func(svc *corev1.Service) {
 		svc.Namespace = m.namespace
@@ -496,6 +534,8 @@ func (m testContinueMigration) Changes(ctx context.Context, client changes.Inter
 type testChangeSetMigration struct {
 	t *testing.T
 }
+
+func (testChangeSetMigration) BackgroundSafe() bool { return false }
 
 func (m testChangeSetMigration) Name() string {
 	return "changesets-migration"

@@ -53,6 +53,10 @@ type Migration interface {
 	// Changes should return the set of changes that this migration wants to
 	// apply to the cluster.
 	Changes(ctx context.Context, client changes.Interface, opts MigrationOptions) (*MigrationChanges, error)
+
+	// BackgroundSafe returns true if this migration is safe to execute in the
+	// background.
+	BackgroundSafe() bool
 }
 
 // Register registers a migration with the migration mechanism.

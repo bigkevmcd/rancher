@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -140,6 +141,53 @@ func ApplyUnappliedMigrations(ctx context.Context, migrationStatus MigrationStat
 	// terminal?
 
 	return result, err
+}
+
+// ApplyUnappliedMigrationsInBackground applies all migrations that are not currently known
+// to be applied, any migrations that are safe to apply in the background will
+// be executed in the background.
+//
+// The state of the applied migrations is recorded, and metrics per-migration
+// for each of the applied migrations is applied.
+func ApplyUnappliedMigrationsInBackground(ctx context.Context, migrationStatus MigrationStatusClient, client dynamic.Interface, options changes.ApplyOptions, mapper meta.RESTMapper) (*sync.WaitGroup, error) {
+	var err error
+	var wg sync.WaitGroup
+	for i := range knownMigrations {
+		migrationName := knownMigrations[i].Name()
+
+		info, statusErr := statusForMigration(ctx, migrationName, migrationStatus)
+		if statusErr != nil {
+			err = errors.Join(err, statusErr)
+			// TODO: log!
+			continue
+		}
+
+		if info.Applied {
+			logger.WithFields(logrus.Fields{"dryrun": options.DryRun, "migration": migrationName}).
+				Debug("Migration skipped - already applied")
+			continue
+		}
+
+		if !knownMigrations[i].BackgroundSafe() {
+			_, migrationErr := Apply(ctx, migrationName, migrationStatus, client, options, mapper)
+			if migrationErr != nil {
+				err = errors.Join(err, migrationErr)
+				// TODO: log!
+			}
+		} else {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := Apply(ctx, migrationName, migrationStatus, client, options, mapper)
+				if err != nil {
+					logger.Errorf("error applying migration %s in the background: %s", migrationName, err)
+					// TODO: log!
+				}
+			}()
+		}
+	}
+
+	return &wg, err
 }
 
 func migrationByName(name string) (Migration, error) {
