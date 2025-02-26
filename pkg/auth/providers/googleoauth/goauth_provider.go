@@ -249,6 +249,10 @@ func (g *googleOauthProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
 	return true, nil
 }
 
+func (g *googleOauthProvider) CanStoreAuthTokens() (bool, error) {
+	return true, nil
+}
+
 func (g *googleOauthProvider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = g.actionHandler
 	schema.Formatter = g.formatter

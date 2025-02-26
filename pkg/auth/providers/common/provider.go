@@ -45,5 +45,9 @@ type AuthProvider interface {
 
 	// Logout implements a guard against invoking the "logout" action when "logout-all" is
 	// forced. If "logout-all" is not supported by the provider do nothing and return nil.
-	Logout(apiContext *types.APIContext, token *v3.Token) error
+	Logout(apiContext *types.APIContext, token accessor.TokenAccessor) error
+
+	// CanStoreAuthTokens implementations should return true if we can store a
+	// provider's auth token in a Secret in the cluster.
+	CanStoreAuthTokens() (bool, error)
 }

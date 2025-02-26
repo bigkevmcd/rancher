@@ -87,6 +87,10 @@ func (g *ghProvider) GetName() string {
 }
 
 func (g *ghProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
+	return g.CanStoreAuthTokens()
+}
+
+func (g *ghProvider) CanStoreAuthTokens() (bool, error) {
 	config, err := g.getConfig()
 	if err != nil {
 		logrus.Errorf("Error fetching github config: %v", err)
@@ -262,12 +266,7 @@ func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, c
 		return v3.Principal{}, nil, "", httperror.NewAPIError(httperror.Unauthorized, "unauthorized")
 	}
 
-	var oidcAuthToken string
-	if !config.TeamSyncDisabled {
-		oidcAuthToken = accessToken
-	}
-
-	return userPrincipal, groupPrincipals, oidcAuthToken, nil
+	return userPrincipal, groupPrincipals, accessToken, nil
 }
 
 // RefetchGroupPrincipals queries GitHub for all the Organizations a user is a

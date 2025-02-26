@@ -95,6 +95,10 @@ func (g *OpenIDCProvider) RefetchGroupPrincipalsEnabled() (bool, error) {
 	return true, nil
 }
 
+func (g *OpenIDCProvider) CanStoreAuthTokens() (bool, error) {
+	return true, nil
+}
+
 func (o *OpenIDCProvider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = o.ActionHandler
 	schema.Formatter = o.Formatter
