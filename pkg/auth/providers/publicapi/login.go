@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +35,7 @@ import (
 	"github.com/rancher/rancher/pkg/types/config"
 	"github.com/rancher/rancher/pkg/user"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/utils/pointer"
 )
@@ -67,7 +68,6 @@ func (h *loginHandler) login(actionName string, action *types.Action, request *t
 	}
 
 	w := request.Response
-
 	token, unhashedTokenKey, responseType, err := h.createLoginToken(request)
 	if err != nil {
 		// if user fails to authenticate, hide the details of the exact error. bad credentials will already be APIErrors
@@ -78,7 +78,10 @@ func (h *loginHandler) login(actionName string, action *types.Action, request *t
 		return httperror.WrapAPIError(err, httperror.ServerError, "Server error while authenticating")
 	}
 
-	if responseType == "cookie" {
+	switch responseType {
+	case "saml":
+		return nil
+	case "cookie":
 		tokenCookie := &http.Cookie{
 			Name:     CookieName,
 			Value:    token.ObjectMeta.Name + ":" + unhashedTokenKey,
@@ -87,9 +90,7 @@ func (h *loginHandler) login(actionName string, action *types.Action, request *t
 			HttpOnly: true,
 		}
 		http.SetCookie(w, tokenCookie)
-	} else if responseType == "saml" {
-		return nil
-	} else {
+	default:
 		tokenData, err := tokens.ConvertTokenResource(request.Schemas.Schema(&schema.PublicVersion, client.TokenType), token)
 		if err != nil {
 			return httperror.WrapAPIError(err, httperror.ServerError, "Server error while authenticating")
@@ -108,7 +109,7 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 	var providerToken string
 	logrus.Debugf("Create Token Invoked")
 
-	bytes, err := ioutil.ReadAll(request.Request.Body)
+	bytes, err := io.ReadAll(request.Request.Body)
 	if err != nil {
 		logrus.Errorf("login failed with error: %v", err)
 		return v3.Token{}, "", "", httperror.NewAPIError(httperror.InvalidBodyContent, "")
@@ -261,6 +262,15 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 			return v3.Token{}, "", "", err
 		}
 		return *token, tokenValue, responseType, nil
+	}
+
+	canStore, err := providers.CanStoreAuthTokens(providerName)
+	if err != nil {
+		return v3.Token{}, "", "", err
+	}
+
+	if !canStore {
+		return v3.Token{ObjectMeta: metav1.ObjectMeta{Name: providerName + "-cookie"}}, providerToken, responseType, nil
 	}
 
 	rToken, unhashedTokenKey, err := h.tokenMGR.NewLoginToken(currUser.Name, userPrincipal, groupPrincipals, providerToken, ttl, description)

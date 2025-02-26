@@ -192,6 +192,10 @@ func (p *mockLdapProvider) RefetchGroupPrincipals(principalID string, secret str
 	panic("RefetchGroupPrincipals Unimplemented!")
 }
 
+func (p *mockLdapProvider) CanStoreAuthTokens() (bool, error) {
+	panic("CanStoreAuthTokens Unimplemented!")
+}
+
 func (p *mockLdapProvider) CanAccessWithGroupProviders(userPrincipalID string, groups []v3.Principal) (bool, error) {
 	panic("CanAccessWithGroupProviders Unimplemented!")
 }
