@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/rancher/rancher/pkg/auth/providers/activedirectory"
 	"github.com/rancher/rancher/pkg/auth/providers/azure"
@@ -25,65 +26,69 @@ import (
 
 func AuthConfigs(management *config.ManagementContext) error {
 	if err := addAuthConfig(github.Name, client.GithubConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", github.Name, err)
 	}
 
 	if err := addAuthConfig(activedirectory.Name, client.ActiveDirectoryConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", activedirectory.Name, err)
 	}
 
 	if err := addAuthConfig(azure.Name, client.AzureADConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", azure.Name, err)
 	}
 
 	if err := addAuthConfig(ldap.OpenLdapName, client.OpenLdapConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", ldap.OpenLdapName, err)
 	}
 
 	if err := addAuthConfig(ldap.FreeIpaName, client.FreeIpaConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", ldap.FreeIpaName, err)
 	}
 
 	if err := addAuthConfigWithSLO(saml.PingName, client.PingConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", saml.PingName, err)
 	}
 
 	if err := addAuthConfigWithSLO(saml.ADFSName, client.ADFSConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", saml.ADFSName, err)
 	}
 
 	if err := addAuthConfigWithSLO(saml.KeyCloakName, client.KeyCloakConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", saml.KeyCloakName, err)
 	}
 
 	if err := addAuthConfigWithSLO(saml.OKTAName, client.OKTAConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", saml.OKTAName, err)
 	}
 
 	if err := addAuthConfigWithSLO(saml.ShibbolethName, client.ShibbolethConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", saml.ShibbolethName, err)
 	}
 
 	if err := addAuthConfig(googleoauth.Name, client.GoogleOauthConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", googleoauth.Name, err)
 	}
 
 	if err := addAuthConfig(oidc.Name, client.OIDCConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", oidc.Name, err)
 	}
 
 	if err := addAuthConfig(keycloakoidc.Name, client.KeyCloakOIDCConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", keycloakoidc.Name, err)
 	}
 
 	if err := addAuthConfig(genericoidc.Name, client.GenericOIDCConfigType, false, management); err != nil {
-		return err
+		return fmt.Errorf("adding AuthConfig: %s: %w", genericoidc.Name, err)
 	}
 	if err := addAuthConfig(cognito.Name, client.CognitoConfigType, false, management); err != nil {
 		return err
 	}
 
-	return addAuthConfig(localprovider.Name, client.LocalConfigType, true, management)
+	if err := addAuthConfig(localprovider.Name, client.LocalConfigType, true, management); err != nil {
+		return fmt.Errorf("adding AuthConfig: %s: %w", localprovider.Name, err)
+	}
+
+	return nil
 }
 
 func addAuthConfig(name, aType string, enabled bool, management *config.ManagementContext) error {
