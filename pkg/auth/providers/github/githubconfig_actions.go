@@ -139,10 +139,5 @@ func (g *ghProvider) testAndApply(request *types.APIContext) error {
 		return httperror.NewAPIError(httperror.ServerError, fmt.Sprintf("Failed to create or update userAttribute: %v", err))
 	}
 
-	var oidcAuthToken string
-	if !githubConfig.TeamSyncDisabled {
-		oidcAuthToken = providerInfo
-	}
-
-	return g.tokenMGR.CreateTokenAndSetCookie(user.Name, userPrincipal, groupPrincipals, oidcAuthToken, 0, "Token via Github Configuration", request)
+	return g.tokenMGR.CreateTokenAndSetCookie(user.Name, userPrincipal, groupPrincipals, providerInfo, 0, "Token via Github Configuration", request)
 }

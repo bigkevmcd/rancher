@@ -86,6 +86,10 @@ func (g *Provider) RefetchGroupPrincipalsEnabled() (bool, error) {
 	return true, nil
 }
 
+func (g *Provider) CanStoreAuthTokens() (bool, error) {
+	return true, nil
+}
+
 func (s *Provider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = s.actionHandler
 	schema.Formatter = s.formatter

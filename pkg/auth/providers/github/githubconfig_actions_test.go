@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/rancher/norman/types"
@@ -38,15 +39,35 @@ func TestGitHubProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("testAndApply when team sync is not disabled", func(t *testing.T) {
+	t.Run("testAndApply", func(t *testing.T) {
 		fakeTokens := &fakeTokensManager{
 			isMemberOfFunc: func(token v3.Token, group v3.Principal) bool {
 				return true
 			},
 			createTokenAndSetCookieFunc: func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
-				if providerToken != "this-is-a-test-token" {
-					t.Errorf("got provider token %v, want %v", providerToken, "this-is-a-test-token")
+				if userID != "testing" {
+					t.Errorf("createTokenAndSetCookieFunc() got userID %s, want %s", userID, "testing")
 				}
+
+				wantUserPrincipal := v3.Principal{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "github_user://1",
+					},
+					PrincipalType: "user", Me: true,
+					Provider: "github",
+				}
+				if !reflect.DeepEqual(userPrincipal, wantUserPrincipal) {
+					t.Errorf("createTokenAndSetCookieFunc() got userPrincipal %#v, want %#v", userPrincipal, wantUserPrincipal)
+				}
+
+				if groupPrincipals != nil {
+					t.Errorf("createTokenAndSetCookieFunc() got groupPrincipals %#v, want nil", groupPrincipals)
+				}
+
+				if providerToken != "this-is-a-test-token" {
+					t.Errorf("createTokenAndSetCookieFunc() got providerToken %q, want %q", providerToken, "this-is-a-test-token")
+				}
+
 				return nil
 			},
 		}
@@ -77,47 +98,7 @@ func TestGitHubProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("testAndApply when team sync is disabled", func(t *testing.T) {
-		fakeTokens := &fakeTokensManager{
-			isMemberOfFunc: func(token v3.Token, group v3.Principal) bool {
-				return true
-			},
-			createTokenAndSetCookieFunc: func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
-				if providerToken != "" {
-					t.Error("got provider token when it should be empty")
-				}
-				return nil
-			},
-		}
-
-		config := v32.GithubConfig{
-			Hostname:         srvURL.Host,
-			TeamSyncDisabled: true,
-		}
-
-		provider := ghProvider{
-			githubClient: &GClient{httpClient: srv.Client()},
-			ctx:          context.Background(),
-			getConfig:    func() (*v32.GithubConfig, error) { return &config, nil },
-			saveConfig:   func(*v32.GithubConfig) error { return nil },
-			tokenMGR:     fakeTokens,
-			userMGR:      stubUserManager{hasAccess: true, username: "testing"},
-		}
-
-		input := &v32.GithubConfigApplyInput{
-			GithubConfig: config,
-			Code:         "testing",
-			Enabled:      true,
-		}
-		httpReq := httptest.NewRequest(http.MethodGet, "/not-used", jsonReader(t, input))
-		req := &normantypes.APIContext{Request: httpReq}
-
-		if err := provider.testAndApply(req); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("LoginUser when team sync is not disabled", func(t *testing.T) {
+	t.Run("LoginUser", func(t *testing.T) {
 		config := &v32.GithubConfig{
 			Hostname: srvURL.Host,
 		}
@@ -137,31 +118,6 @@ func TestGitHubProvider(t *testing.T) {
 
 		if token != "this-is-a-test-token" {
 			t.Errorf("got provider token %v, want %v", token, "this-is-a-test-token")
-		}
-	})
-
-	t.Run("LoginUser when team sync is disabled", func(t *testing.T) {
-		config := &v32.GithubConfig{
-			Hostname:         srvURL.Host,
-			TeamSyncDisabled: true,
-		}
-
-		provider := ghProvider{
-			githubClient: &GClient{httpClient: srv.Client()},
-			ctx:          context.Background(),
-			getConfig:    func() (*v32.GithubConfig, error) { return config, nil },
-			saveConfig:   func(*v32.GithubConfig) error { return nil },
-			tokenMGR:     nil,
-			userMGR:      stubUserManager{hasAccess: true, username: "testing"},
-		}
-
-		_, _, token, err := provider.LoginUser("", &v32.GithubLogin{}, config, false)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if token != "" {
-			t.Errorf("got provider token when it should be empty: %v", token)
 		}
 	})
 }
