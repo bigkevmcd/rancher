@@ -150,6 +150,8 @@ func (t *TestManager) runTestCases(hashingEnabled bool) {
 	}
 }
 
+// TODO: Test for GetSecret
+
 func receivedData(c <-chan map[string]interface{}, t <-chan time.Time, result chan<- bool) {
 	select {
 	case <-c:
