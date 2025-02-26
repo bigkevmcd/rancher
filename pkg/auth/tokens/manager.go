@@ -528,7 +528,8 @@ func (m *Manager) CreateSecret(userID, provider, secret string) error {
 	return m.UpdateSecret(userID, provider, secret)
 }
 
-func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []*v3.Token) (string, error) {
+func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error) {
+	logrus.Infof("GetSecret for %s in %s", userID, provider)
 	cachedSecret, err := m.secretLister.Get(SecretNamespace, userID+secretNameEnding)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return "", err
@@ -538,8 +539,10 @@ func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []*v3
 		return string(cachedSecret.Data[provider]), nil
 	}
 
+	logrus.Infof("GetSecret did not find secret for userID %s, falling back to tokens", userID)
 	for _, token := range fallbackTokens {
 		secret := coalesce(token.GetProviderInfo["access_token"], token.Token)
+		logrus.Infof("GetSecret coalesced from %s and %s to %s", token.ProviderInfo["access_token"], token.Token, secret)
 		if secret != "" {
 			return secret, nil
 		}
