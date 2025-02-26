@@ -81,6 +81,10 @@ func (g *Provider) RefetchGroupPrincipalsEnabled() (bool, error) {
 	return true, nil
 }
 
+func (g *Provider) CanStoreAuthTokens() (bool, error) {
+	return true, nil
+}
+
 func (ap *Provider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
 	login, ok := input.(*v32.AzureADLogin)
 	if !ok {
