@@ -539,13 +539,22 @@ func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []*v3
 	}
 
 	for _, token := range fallbackTokens {
-		secret := token.ProviderInfo["access_token"]
+		secret := coalesce(token.GetProviderInfo["access_token"], token.Token)
 		if secret != "" {
 			return secret, nil
 		}
 	}
 
 	return "", err // The not found error from above
+}
+
+func coalesce(strs ...string) string {
+	for _, v := range strs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (m *Manager) UpdateSecret(userID, provider, secret string) error {
