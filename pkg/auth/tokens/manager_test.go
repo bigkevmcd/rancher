@@ -3,11 +3,14 @@ package tokens
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/rancher/norman/api/writer"
 	"github.com/rancher/norman/types"
+	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/tokens/hashers"
 	"github.com/rancher/rancher/pkg/features"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
@@ -15,7 +18,12 @@ import (
 	"github.com/rancher/wrangler/v3/pkg/randomtoken"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/pointer"
 )
@@ -297,4 +305,140 @@ func TestUserAttributeCreateOrUpdateUpdatesGroups(t *testing.T) {
 	require.NotEmpty(t, principals)
 	require.Len(t, principals.Items, 1)
 	assert.Equal(t, principals.Items[0].Name, "group1")
+}
+
+func TestCreateTokenAndSetCookieWithAuthToken(t *testing.T) {
+	fc := &fakeTokensClient{}
+	secrets := &fakeSecretsInterface{}
+	m := Manager{
+		tokensClient: fc,
+		secretLister: &fakeSecretLister{
+			map[string]*corev1.Secret{
+				"testuser-secret": &corev1.Secret{
+					Data: map[string][]byte{},
+				},
+			},
+		},
+		secrets: secrets,
+	}
+	userPrincipal := v3.Principal{
+		Provider: "github",
+	}
+	username := "testuser"
+	req := httptest.NewRequest(http.MethodPost, "https://rancher.example.com/test", nil)
+	resp := httptest.NewRecorder()
+	err := m.CreateTokenAndSetCookieWithAuthToken(username, userPrincipal,
+		[]v3.Principal{},
+		"this-is-a-secret-token", 1000, "test description",
+		&types.APIContext{
+			Schemas:  types.NewSchemas(),
+			Request:  req,
+			Response: resp,
+			ResponseWriter: &writer.EncodingResponseWriter{
+				ContentType: "application/json",
+				Encoder:     types.JSONEncoder,
+			},
+		})
+	assert.NoError(t, err)
+
+	want := []*v32.Token{
+		{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Token",
+				APIVersion: "management.cattle.io/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "token-mmls2",
+				Labels: map[string]string{
+					"authn.management.cattle.io/token-userId": username,
+				},
+			},
+			Token: "test-random-token",
+		},
+	}
+	assert.Equal(t, want, fc.created)
+
+	cookie, err := http.ParseSetCookie(resp.Header().Get("Set-Cookie"))
+	assert.NoError(t, err)
+	assert.Regexp(t, "^token-mmls2:", cookie.Value)
+
+	wantSecrets := []*corev1.Secret{
+		{
+			Data: map[string][]byte{
+				"github": []byte("this-is-a-secret-token"),
+			},
+		},
+	}
+	assert.Equal(t, secrets.updated, wantSecrets)
+}
+
+type fakeTokensClient struct {
+	created []*v32.Token
+}
+
+func (c *fakeTokensClient) Create(k8sToken *v32.Token) (*v32.Token, error) {
+	tok := &v32.Token{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "management.cattle.io/v3",
+			Kind:       "Token",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				UserIDLabel: k8sToken.UserID,
+			},
+			Name: "token-mmls2",
+		},
+		Token: "test-random-token",
+	}
+	c.created = append(c.created, tok)
+
+	return tok, nil
+}
+
+func (c *fakeTokensClient) Get(name string, opts metav1.GetOptions) (*v32.Token, error) {
+	return nil, nil
+}
+
+func (c *fakeTokensClient) Update(*v32.Token) (*v32.Token, error) {
+	return nil, nil
+}
+
+func (c *fakeTokensClient) Delete(name string, options *metav1.DeleteOptions) error {
+	return nil
+}
+
+func (c *fakeTokensClient) List(opts metav1.ListOptions) (*v32.TokenList, error) {
+	return nil, nil
+}
+
+type fakeSecretLister struct {
+	secrets map[string]*corev1.Secret
+}
+
+func (f *fakeSecretLister) List(namespace string, selector labels.Selector) ([]*corev1.Secret, error) {
+	return nil, nil
+}
+
+func (f *fakeSecretLister) Get(namespace, name string) (*corev1.Secret, error) {
+	secret := f.secrets[name]
+	if secret == nil {
+		return nil, errors.NewNotFound(schema.GroupResource{Resource: "secrets"}, name)
+	}
+
+	return secret, nil
+}
+
+type fakeSecretsInterface struct {
+	created []*corev1.Secret
+	updated []*corev1.Secret
+}
+
+func (f *fakeSecretsInterface) Create(s *corev1.Secret) (*corev1.Secret, error) {
+	f.created = append(f.created, s)
+	return s, nil
+}
+
+func (f *fakeSecretsInterface) Update(s *corev1.Secret) (*corev1.Secret, error) {
+	f.updated = append(f.updated, s)
+	return s, nil
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/rancher/rancher/pkg/auth/tokens"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/types/config"
-	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -55,7 +54,6 @@ func (h *principalsHandler) actions(actionName string, action *types.Action, api
 	}
 
 	cookie, _ := apiContext.Request.Cookie(tokens.CookieName)
-	logrus.Infof("KEVIN! search token = %#v and the token = %#v", cookie, *token)
 	ps, err := providers.SearchPrincipals(input.Name, input.PrincipalType, *token)
 	if err != nil {
 		return err

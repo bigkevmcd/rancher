@@ -283,6 +283,17 @@ func (a *tokenAuthenticator) TokenFromRequest(req *http.Request) (*v3.Token, err
 		lookupUsingClient = true
 	}
 
+	if tokenName == "github-cookie" {
+		return &v3.Token{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: tokenName,
+			},
+			Token:        tokenKey,
+			AuthProvider: "github",
+			UserID:       "",
+		}, nil
+	}
+
 	var storedToken *v3.Token
 	if lookupUsingClient {
 		storedToken, err = a.tokenClient.Get(tokenName, metav1.GetOptions{})
