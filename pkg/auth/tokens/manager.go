@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/settings"
 	"github.com/rancher/rancher/pkg/types/config"
-	"github.com/rancher/rancher/pkg/utils"
 	"github.com/rancher/wrangler/v3/pkg/randomtoken"
 
 	"github.com/sirupsen/logrus"
@@ -88,16 +88,31 @@ func OnLogout(logoutFunc LogoutFunc) {
 	onLogout = logoutFunc
 }
 
+type tokensClient interface {
+	Create(*v32.Token) (*v32.Token, error)
+	Get(name string, opts metav1.GetOptions) (*v32.Token, error)
+	Update(*v32.Token) (*v32.Token, error)
+	Delete(name string, options *metav1.DeleteOptions) error
+	List(opts metav1.ListOptions) (*v32.TokenList, error)
+}
+
+type secretsInterface interface {
+	Create(*v1.Secret) (*v1.Secret, error)
+	Update(*v1.Secret) (*v1.Secret, error)
+}
+
 type Manager struct {
-	ctx                 context.Context
-	tokensClient        v3.TokenInterface
+	ctx context.Context
+	// tokensClient v3.TokenInterface
+	tokensClient        tokensClient
 	userAttributes      v3.UserAttributeInterface
 	userAttributeLister v3.UserAttributeLister
 	userIndexer         cache.Indexer
 	tokenIndexer        cache.Indexer
 	userLister          v3.UserLister
-	secrets             v1.SecretInterface
-	secretLister        v1.SecretLister
+	// secrets             v1.SecretInterface
+	secrets      secretsInterface
+	secretLister v1.SecretLister
 }
 
 type (
@@ -132,7 +147,7 @@ func (m *Manager) createDerivedToken(jsonInput clientv3.Token, tokenAuthValue st
 		return v3.Token{}, "", 401, err
 	}
 
-	tokenTTL, err := ClampToMaxTTL(time.Duration(int64(jsonInput.TTLMillis)) * time.Millisecond)
+	tokenTTL, err := clampToMaxTTL(time.Duration(int64(jsonInput.TTLMillis)) * time.Millisecond)
 	if err != nil {
 		return v3.Token{}, "", 500, fmt.Errorf("error validating max-ttl %v", err)
 	}
@@ -285,9 +300,7 @@ func (m *Manager) getTokenByID(tokenAuthValue string, tokenID string) (v3.Token,
 }
 
 func (m *Manager) deriveToken(request *types.APIContext) error {
-
 	r := request.Request
-
 	tokenAuthValue := GetTokenAuthFromRequest(r)
 	if tokenAuthValue == "" {
 		// no cookie or auth header, cannot authenticate
@@ -532,7 +545,7 @@ func (m *Manager) CreateSecret(userID, provider, secret string) error {
 	return m.UpdateSecret(userID, provider, secret)
 }
 
-func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error) {
+func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []v3.Token) (string, error) {
 	logrus.Infof("GetSecret for %s in %s", userID, provider)
 	cachedSecret, err := m.secretLister.Get(SecretNamespace, userID+secretNameEnding)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -561,7 +574,6 @@ func (m *Manager) UpdateSecret(userID, provider, secret string) error {
 	}
 
 	cachedSecret = cachedSecret.DeepCopy()
-
 	cachedSecret.Data[provider] = []byte(secret)
 
 	_, err = m.secrets.Update(cachedSecret)
@@ -691,10 +703,12 @@ func (m *Manager) userAttributeChanged(attribs *v32.UserAttribute, provider stri
 // PerUserCacheProviders is a set of provider names for which the token manager creates a per-user login token.
 var PerUserCacheProviders = []string{"github", "azuread", "googleoauth", "oidc", "keycloakoidc", "genericoidc", "cognito"}
 
+// TODO: groupPrincipals is NOT used in this code.
 func (m *Manager) NewLoginToken(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int64, description string) (v3.Token, string, error) {
 	provider := userPrincipal.Provider
 	// Providers that use oauth need to create a secret for storing the access token.
-	if utils.Contains(PerUserCacheProviders, provider) && providerToken != "" {
+
+	if slices.Contains(PerUserCacheProviders, provider) && providerToken != "" {
 		err := m.CreateSecret(userID, provider, providerToken)
 		if err != nil {
 			return v3.Token{}, "", fmt.Errorf("unable to create secret: %s", err)
@@ -804,6 +818,31 @@ func (m *Manager) CreateTokenAndSetCookie(userID string, userPrincipal v3.Princi
 	return nil
 }
 
+func (m *Manager) CreateTokenAndSetCookieWithAuthToken(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
+	token, unhashedTokenKey, err := m.NewLoginToken(userID, userPrincipal, groupPrincipals, providerToken, 0, description)
+	if err != nil {
+		logrus.Errorf("Failed creating token with error: %v", err)
+		return httperror.NewAPIErrorLong(500, "", fmt.Sprintf("Failed creating token with error: %v", err))
+	}
+
+	isSecure := false
+	if request.Request.URL.Scheme == "https" {
+		isSecure = true
+	}
+
+	tokenCookie := &http.Cookie{
+		Name:     CookieName,
+		Value:    token.ObjectMeta.Name + ":" + unhashedTokenKey,
+		Secure:   isSecure,
+		Path:     "/",
+		HttpOnly: true,
+	}
+	http.SetCookie(request.Response, tokenCookie)
+	request.WriteResponse(http.StatusOK, nil)
+
+	return nil
+}
+
 // TokenStreamTransformer only filters out data for tokens that do not belong to the user
 func (m *Manager) TokenStreamTransformer(
 	apiContext *types.APIContext,
@@ -843,8 +882,8 @@ func ParseTokenTTL(ttl string) (time.Duration, error) {
 	return dur, nil
 }
 
-// ClampToMaxTTL will return the duration of the provided TTL or the duration of settings.AuthTokenMaxTTLMinutes whichever is smaller.
-func ClampToMaxTTL(ttl time.Duration) (time.Duration, error) {
+// clampToMaxTTL will return the duration of the provided TTL or the duration of settings.AuthTokenMaxTTLMinutes whichever is smaller.
+func clampToMaxTTL(ttl time.Duration) (time.Duration, error) {
 	maxTTL, err := ParseTokenTTL(settings.AuthTokenMaxTTLMinutes.Get())
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse setting '%s': %w", settings.AuthTokenMaxTTLMinutes.Name, err)
@@ -869,7 +908,7 @@ func GetKubeconfigDefaultTokenTTLInMilliSeconds() (*int64, error) {
 		return nil, fmt.Errorf("failed to parse setting '%s': %w", settings.KubeconfigDefaultTokenTTLMinutes.Name, err)
 	}
 
-	tokenTTL, err := ClampToMaxTTL(defaultTokenTTL)
+	tokenTTL, err := clampToMaxTTL(defaultTokenTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate token ttl: %w", err)
 	}
