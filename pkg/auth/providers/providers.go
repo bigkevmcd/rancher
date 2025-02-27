@@ -258,6 +258,12 @@ func RefetchGroupPrincipals(principalID string, providerName string, secret stri
 	return Providers[providerName].RefetchGroupPrincipals(principalID, secret)
 }
 
+// CanStoreAuthTokens returns true if we can persist authentication tokens from
+// the named authentication provider.
+func CanStoreAuthTokens(providerName string) (bool, error) {
+	return Providers[providerName].CanStoreAuthTokens()
+}
+
 func GetUserExtraAttributes(providerName string, userPrincipal v3.Principal) map[string][]string {
 	return Providers[providerName].GetUserExtraAttributes(userPrincipal)
 }

@@ -211,3 +211,7 @@ func (f fakeProvider) GetUserExtraAttributesFromToken(_ accessor.TokenAccessor) 
 func (f fakeProvider) IsDisabledProvider() (bool, error) {
 	panic("implement me")
 }
+
+func (f fakeProvider) CanStoreAuthTokens() (bool, error) {
+	panic("implement me")
+}
