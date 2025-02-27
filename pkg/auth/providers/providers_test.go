@@ -206,3 +206,7 @@ func (f fakeProvider) GetUserExtraAttributes(_ v3.Principal) map[string][]string
 func (f fakeProvider) IsDisabledProvider() (bool, error) {
 	panic("implement me")
 }
+
+func (f fakeProvider) CanStoreAuthTokens() (bool, error) {
+	panic("implement me")
+}
