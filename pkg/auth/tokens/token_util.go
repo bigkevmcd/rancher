@@ -97,6 +97,7 @@ func GetTokenAuthFromRequest(req *http.Request) string {
 			tokenAuthValue = cookie.Value
 		}
 	}
+
 	return tokenAuthValue
 }
 
