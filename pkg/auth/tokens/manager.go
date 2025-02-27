@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"reflect"
 	"sort"
@@ -187,6 +188,8 @@ func (m *Manager) updateToken(token *v3.Token) (*v3.Token, error) {
 }
 
 func (m *Manager) getToken(tokenAuthValue string) (*v3.Token, int, error) {
+	log.Printf("KEVIN!!!! Manager.getToken with %q", tokenAuthValue)
+
 	tokenName, tokenKey := SplitTokenParts(tokenAuthValue)
 
 	lookupUsingClient := false
@@ -284,9 +287,7 @@ func (m *Manager) getTokenByID(tokenAuthValue string, tokenID string) (v3.Token,
 }
 
 func (m *Manager) deriveToken(request *types.APIContext) error {
-
 	r := request.Request
-
 	tokenAuthValue := GetTokenAuthFromRequest(r)
 	if tokenAuthValue == "" {
 		// no cookie or auth header, cannot authenticate
