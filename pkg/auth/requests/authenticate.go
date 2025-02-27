@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -328,6 +329,19 @@ func (a *tokenAuthenticator) TokenFromRequest(req *http.Request) (accessor.Token
 		}
 	} else if len(objs) == 0 {
 		lookupUsingClient = true
+	}
+
+	log.Printf("KEVIN!!!!! tokenName = %s, tokenKey = %s, lookupUsingClient = %v", tokenName, tokenKey, lookupUsingClient)
+
+	if tokenName == "github-cookie" {
+		return &v3.Token{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: tokenName,
+			},
+			Token:        tokenKey,
+			AuthProvider: "github",
+			UserID:       "",
+		}, nil
 	}
 
 	var storedToken *v3.Token

@@ -267,7 +267,7 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 
 	if !canStore {
 		logrus.Info("canStore is disabled returning the auth token directly")
-		return v3.Token{ObjectMeta: metav1.ObjectMeta{Name: providerName + "-cookie"}}, providerToken, responseType, nil
+		return v3.Token{ObjectMeta: metav1.ObjectMeta{Name: providerName + "-cookie-" + currUser.Name}, UserID: currUser.Name, UserPrincipal: userPrincipal}, providerToken, responseType, nil
 	}
 
 	rToken, unhashedTokenKey, err := h.tokenMGR.NewLoginToken(currUser.Name, userPrincipal, groupPrincipals, providerToken, ttl, description)
