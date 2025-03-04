@@ -34,7 +34,6 @@ import (
 	"github.com/rancher/rancher/pkg/types/config"
 	"github.com/rancher/rancher/pkg/user"
 	"github.com/sirupsen/logrus"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/utils/pointer"
 )
@@ -258,16 +257,6 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 			return v3.Token{}, "", "", err
 		}
 		return *token, tokenValue, responseType, nil
-	}
-
-	canStore, err := providers.CanStoreAuthTokens(providerName)
-	if err != nil {
-		return v3.Token{}, "", "", err
-	}
-
-	if !canStore {
-		logrus.Info("canStore is disabled returning the auth token directly")
-		return v3.Token{ObjectMeta: metav1.ObjectMeta{Name: providerName + "-cookie-" + currUser.Name}, UserID: currUser.Name, UserPrincipal: userPrincipal}, providerToken, responseType, nil
 	}
 
 	rToken, unhashedTokenKey, err := h.tokenMGR.NewLoginToken(currUser.Name, userPrincipal, groupPrincipals, providerToken, ttl, description)
