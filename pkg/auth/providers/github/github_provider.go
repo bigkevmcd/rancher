@@ -36,6 +36,7 @@ type tokensManager interface {
 	GetSecret(userID string, provider string, fallbackTokens []*v3.Token) (string, error)
 	IsMemberOf(token v3.Token, group v3.Principal) bool
 	CreateTokenAndSetCookie(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
+	CreateTokenAndSetCookieWithAuthToken(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
 	UserAttributeCreateOrUpdate(userID, provider string, groupPrincipals []v3.Principal, userExtraInfo map[string][]string, loginTime ...time.Time) error
 }
 
