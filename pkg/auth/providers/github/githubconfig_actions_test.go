@@ -13,6 +13,7 @@ import (
 	"github.com/rancher/norman/types"
 	normantypes "github.com/rancher/norman/types"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/auth/accessor"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -41,7 +42,7 @@ func TestGitHubProvider(t *testing.T) {
 
 	t.Run("testAndApply", func(t *testing.T) {
 		fakeTokens := &fakeTokensManager{
-			isMemberOfFunc: func(token v3.Token, group v3.Principal) bool {
+			isMemberOfFunc: func(token accessor.TokenAccessor, group v3.Principal) bool {
 				return true
 			},
 			createTokenAndSetCookieFunc: func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {

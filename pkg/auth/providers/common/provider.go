@@ -28,7 +28,7 @@ const (
 type AuthProvider interface {
 	GetName() string
 	AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error)
-	SearchPrincipals(name, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error)
+	SearchPrincipals(apiContext *types.APIContext, name, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error)
 	GetPrincipal(principalID string, token accessor.TokenAccessor) (v3.Principal, error)
 	CustomizeSchema(schema *types.Schema)
 	TransformToAuthProvider(authConfig map[string]interface{}) (map[string]interface{}, error)

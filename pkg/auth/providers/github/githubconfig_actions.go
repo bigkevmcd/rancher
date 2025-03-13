@@ -127,7 +127,7 @@ func (g *ghProvider) testAndApply(request *types.APIContext) error {
 	}
 
 	githubConfig.Enabled = githubConfigApplyInput.Enabled
-	err = g.saveConfig(&githubConfig)
+	err = g.saveGithubConfig(&githubConfig)
 	if err != nil {
 		return httperror.NewAPIError(httperror.ServerError, fmt.Sprintf("Failed to save github config: %v", err))
 	}
@@ -139,5 +139,5 @@ func (g *ghProvider) testAndApply(request *types.APIContext) error {
 		return httperror.NewAPIError(httperror.ServerError, fmt.Sprintf("Failed to create or update userAttribute: %v", err))
 	}
 
-	return g.tokenMGR.CreateTokenAndSetCookie(user.Name, userPrincipal, groupPrincipals, providerInfo, 0, "Token via Github Configuration", request)
+	return g.tokenMGR.CreateTokenAndSetCookieWithAuthToken(user.Name, userPrincipal, groupPrincipals, providerInfo, 0, "Token via Github Configuration", request)
 }

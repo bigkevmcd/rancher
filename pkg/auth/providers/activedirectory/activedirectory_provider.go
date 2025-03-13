@@ -132,7 +132,7 @@ func (p *adProvider) AuthenticateUser(ctx context.Context, input interface{}) (v
 	return principal, groupPrincipal, "", err
 }
 
-func (p *adProvider) SearchPrincipals(searchKey, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error) {
+func (p *adProvider) SearchPrincipals(_ *types.APIContext, searchKey, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error) {
 	var principals []v3.Principal
 	var err error
 

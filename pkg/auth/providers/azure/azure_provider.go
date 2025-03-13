@@ -134,7 +134,7 @@ func (ap *Provider) RefetchGroupPrincipals(principalID, secret string) ([]v3.Pri
 	return groupPrincipals, nil
 }
 
-func (ap *Provider) SearchPrincipals(name, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (ap *Provider) SearchPrincipals(_ *types.APIContext, name, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	cfg, err := ap.GetAzureConfigK8s()
 	if err != nil {
 		return nil, err
