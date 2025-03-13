@@ -288,7 +288,8 @@ func TestGenOIDCProvider_SearchPrincipals(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := g.SearchPrincipals(test.searchValue, test.principalType, &v3.Token{})
+			// nil is an unused *types.APIContext
+			result, err := g.SearchPrincipals(nil, test.searchValue, test.principalType, &v3.Token{})
 			if err != nil {
 				t.Errorf("SearchPrincipals() returned an error: %v", err)
 			}
@@ -301,7 +302,8 @@ func TestGenOIDCProvider_SearchPrincipals(t *testing.T) {
 		// And same behaviour for ext tokens
 		t.Run(test.name+", ext", func(t *testing.T) {
 			t.Parallel()
-			result, err := g.SearchPrincipals(test.searchValue, test.principalType, &ext.Token{})
+			// nil is an unused *types.APIContext
+			result, err := g.SearchPrincipals(nil, test.searchValue, test.principalType, &ext.Token{})
 			if err != nil {
 				t.Errorf("SearchPrincipals() returned an error: %v", err)
 			}

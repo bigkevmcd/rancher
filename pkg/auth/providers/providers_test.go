@@ -176,7 +176,7 @@ func (f fakeProvider) AuthenticateUser(_ context.Context, _ interface{}) (v3.Pri
 	panic("implement me")
 }
 
-func (f fakeProvider) SearchPrincipals(_, _ string, _ accessor.TokenAccessor) ([]v3.Principal, error) {
+func (f fakeProvider) SearchPrincipals(_ *types.APIContext, _, _ string, _ accessor.TokenAccessor) ([]v3.Principal, error) {
 	panic("implement me")
 }
 

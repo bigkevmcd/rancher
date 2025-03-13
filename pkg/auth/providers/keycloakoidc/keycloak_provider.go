@@ -8,6 +8,7 @@ import (
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/pkg/errors"
+	"github.com/rancher/norman/types"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
 	"github.com/rancher/rancher/pkg/auth/providers/common"
@@ -74,7 +75,7 @@ func (k *keyCloakOIDCProvider) newClient(config *v32.OIDCConfig, token accessor.
 	return keyCloakClient, err
 }
 
-func (k *keyCloakOIDCProvider) SearchPrincipals(searchValue, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (k *keyCloakOIDCProvider) SearchPrincipals(_ *types.APIContext, searchValue, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	var principals []v3.Principal
 	var err error
 
