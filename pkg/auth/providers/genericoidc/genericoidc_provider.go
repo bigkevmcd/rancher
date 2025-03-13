@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/rancher/norman/types"
 	"github.com/rancher/rancher/pkg/auth/accessor"
 	"github.com/rancher/rancher/pkg/auth/providers/common"
 	baseoidc "github.com/rancher/rancher/pkg/auth/providers/oidc"
@@ -51,7 +52,7 @@ func (g *GenOIDCProvider) GetName() string {
 // that matches the searchValue.  If principalType is empty, both a user principal and a group principal will
 // be returned.  This is done because OIDC does not have a proper lookup mechanism.  In order
 // to provide some degree of functionality that allows manual entry for users/groups, this is the compromise.
-func (g *GenOIDCProvider) SearchPrincipals(searchValue, principalType string, _ accessor.TokenAccessor) ([]v3.Principal, error) {
+func (g *GenOIDCProvider) SearchPrincipals(_ *types.APIContext, searchValue, principalType string, _ accessor.TokenAccessor) ([]v3.Principal, error) {
 	var principals []v3.Principal
 
 	if principalType != GroupType {

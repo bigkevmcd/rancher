@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -222,7 +223,6 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 		enabled  bool
 		currUser *v3.User
 	)
-
 	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
 		var err error
 
@@ -256,12 +256,21 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 	}
 
 	if strings.HasPrefix(responseType, tokens.KubeconfigResponseType) {
+		log.Printf("KEVIN!!!!! responseType = %v", responseType)
 		token, tokenValue, err := tokens.GetKubeConfigToken(currUser.Name, responseType, h.userMGR, userPrincipal)
 		if err != nil {
 			return v3.Token{}, "", "", err
 		}
 		return *token, tokenValue, responseType, nil
 	}
+
+	// KEVIN TODO: How do we know when to use the providerToken here?
+	canStore, _ := providers.CanStoreAuthTokens(providerName)
+	if !canStore {
+		providerToken = ""
+	}
+
+	log.Printf("KEVIN!!!!!!! Create Token ending - creating a NewLoginToken for %v / %v with %v and %v", currUser.Name, userPrincipal, providerToken, description)
 
 	rToken, unhashedTokenKey, err := h.tokenMGR.NewLoginToken(currUser.Name, userPrincipal, groupPrincipals, providerToken, ttl, description)
 	return rToken, unhashedTokenKey, responseType, err

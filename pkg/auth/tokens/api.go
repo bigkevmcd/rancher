@@ -15,6 +15,7 @@ import (
 
 const (
 	CookieName      = "R_SESS"
+	AuthCookieName  = "R_AUTH"
 	AuthHeaderName  = "Authorization"
 	AuthValuePrefix = "Bearer"
 	BasicAuthPrefix = "Basic"

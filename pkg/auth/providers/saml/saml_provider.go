@@ -358,9 +358,9 @@ func (s *Provider) RefetchGroupPrincipals(principalID string, secret string) ([]
 // Otherwise it returns a "fake" principal of a requested type with the name as the searchKey.
 // If the principalType is empty, both user and group principals are returned.
 // This is done because SAML, in the absence of LDAP, doesn't have a user/group lookup mechanism.
-func (s *Provider) SearchPrincipals(searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (s *Provider) SearchPrincipals(ctx *types.APIContext, searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	if s.hasLdapGroupSearch() {
-		principals, err := s.ldapProvider.SearchPrincipals(searchKey, principalType, token)
+		principals, err := s.ldapProvider.SearchPrincipals(ctx, searchKey, principalType, token)
 		// only give response from ldap if it's configured
 		if !ldap.IsNotConfigured(err) {
 			return principals, err
