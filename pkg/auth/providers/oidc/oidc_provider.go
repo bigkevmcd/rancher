@@ -150,7 +150,7 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *v32.OID
 	return userPrincipal, groupPrincipals, string(oauthToken), userClaimInfo, nil
 }
 
-func (o *OpenIDCProvider) SearchPrincipals(searchValue, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (o *OpenIDCProvider) SearchPrincipals(_ *types.APIContext, searchValue, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	var principals []v3.Principal
 
 	if principalType == "" {

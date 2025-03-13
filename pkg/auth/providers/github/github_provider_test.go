@@ -19,9 +19,10 @@ import (
 )
 
 type fakeTokensManager struct {
-	getSecretFunc               func(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error)
-	isMemberOfFunc              func(token accessor.TokenAccessor, group v3.Principal) bool
-	createTokenAndSetCookieFunc func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
+	getSecretFunc                            func(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error)
+	isMemberOfFunc                           func(token accessor.TokenAccessor, group v3.Principal) bool
+	createTokenAndSetCookieFunc              func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
+	createTokenAndSetCookieWithAuthTokenFunc func(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
 }
 
 func (m *fakeTokensManager) GetSecret(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error) {
@@ -41,6 +42,13 @@ func (m *fakeTokensManager) IsMemberOf(token accessor.TokenAccessor, group v3.Pr
 func (m *fakeTokensManager) CreateTokenAndSetCookie(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
 	if m.createTokenAndSetCookieFunc != nil {
 		return m.createTokenAndSetCookieFunc(userID, userPrincipal, groupPrincipals, providerToken, ttl, description, request)
+	}
+	return nil
+}
+
+func (m *fakeTokensManager) CreateTokenAndSetCookieWithAuthToken(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
+	if m.createTokenAndSetCookieWithAuthTokenFunc != nil {
+		return m.createTokenAndSetCookieWithAuthTokenFunc(userID, userPrincipal, groupPrincipals, providerToken, ttl, description, request)
 	}
 	return nil
 }
@@ -161,7 +169,8 @@ func TestSearchPrincipals(t *testing.T) {
 	}
 
 	// Search for groups and users.
-	found, err := provider.SearchPrincipals("dev", "", &token)
+	// TODO: KEVIN
+	found, err := provider.SearchPrincipals(nil, "dev", "", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +214,8 @@ func TestSearchPrincipals(t *testing.T) {
 	}
 
 	// Search for groups only.
-	found, err = provider.SearchPrincipals("dev", "group", &token)
+	// TODO: KEVIN
+	found, err = provider.SearchPrincipals(nil, "dev", "group", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +233,8 @@ func TestSearchPrincipals(t *testing.T) {
 	}
 
 	// Search for users only.
-	found, err = provider.SearchPrincipals("dev", "user", &token)
+	// TODO: KEVIN
+	found, err = provider.SearchPrincipals(nil, "dev", "user", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +360,8 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	}
 
 	// Search for groups and users.
-	found, err := provider.SearchPrincipals("dev", "", &token)
+	// TODO: KEVIN
+	found, err := provider.SearchPrincipals(nil, "dev", "", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +405,8 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	}
 
 	// Search for groups only.
-	found, err = provider.SearchPrincipals("dev", "group", &token)
+	// TODO: KEVIN
+	found, err = provider.SearchPrincipals(nil, "dev", "group", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +424,8 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	}
 
 	// Search for users only.
-	found, err = provider.SearchPrincipals("dev", "user", &token)
+	// TODO: KEVIN
+	found, err = provider.SearchPrincipals(nil, "dev", "user", &token)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -222,8 +222,7 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 		enabled  bool
 		currUser *v3.User
 	)
-
-	err = wait.ExponentialBackoff(backoff, func() (bool, error) {
+	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(_ context.Context) (bool, error) {
 		var err error
 
 		currUser, err = h.userMGR.EnsureUser(userPrincipal.Name, displayName)
@@ -261,6 +260,12 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 			return v3.Token{}, "", "", err
 		}
 		return *token, tokenValue, responseType, nil
+	}
+
+	canStore, _ := providers.CanStoreAuthTokens(providerName)
+	if !canStore {
+		logrus.Debugf("createLoginToken: not storing login token for provider %s", providerName)
+		providerToken = ""
 	}
 
 	rToken, unhashedTokenKey, err := h.tokenMGR.NewLoginToken(currUser.Name, userPrincipal, groupPrincipals, providerToken, ttl, description)

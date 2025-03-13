@@ -131,7 +131,7 @@ func (g *googleOauthProvider) loginUser(c context.Context, googleOAuthCredential
 	return userPrincipal, groupPrincipals, string(oauthToken), nil
 }
 
-func (g *googleOauthProvider) SearchPrincipals(searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (g *googleOauthProvider) SearchPrincipals(_ *types.APIContext, searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	var principals []v3.Principal
 	var err error
 

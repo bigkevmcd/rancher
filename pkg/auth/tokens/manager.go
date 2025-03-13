@@ -2,6 +2,7 @@ package tokens
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -166,7 +167,6 @@ func (m *Manager) createDerivedToken(jsonInput clientv3.Token, tokenAuthValue st
 	derivedToken, unhashedTokenKey, err = m.createToken(&derivedToken)
 
 	return derivedToken, unhashedTokenKey, 0, err
-
 }
 
 // createToken returns the token object and it's unhashed token key, which is stored hashed
@@ -189,7 +189,9 @@ func (m *Manager) createToken(k8sToken *v3.Token) (v3.Token, string, error) {
 	if err != nil {
 		return v3.Token{}, "", err
 	}
+
 	createdToken, err := m.tokensClient.Create(k8sToken)
+	logrus.Debugf("createToken: created token %s", createdToken.Name)
 
 	if err != nil {
 		return v3.Token{}, "", err
@@ -521,31 +523,32 @@ func (m *Manager) removeToken(request *types.APIContext) error {
 // key being the provider and data being the providers secret
 func (m *Manager) CreateSecret(userID, provider, secret string) error {
 	_, err := m.secretLister.Get(SecretNamespace, userID+secretNameEnding)
-	// An error either means it already exists or something bad happened
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return err
-		}
-		// The secret doesn't exist so create it
-		data := make(map[string]string)
-		data[provider] = secret
-
-		s := apicorev1.Secret{
-			StringData: data,
-		}
-		s.ObjectMeta = metav1.ObjectMeta{
-			Name:      userID + secretNameEnding,
-			Namespace: SecretNamespace,
-		}
-		_, err = m.secrets.Create(&s)
-		return err
+	if err == nil {
+		// No error means the secret already exists and needs to be updated
+		return m.UpdateSecret(userID, provider, secret)
 	}
 
-	// No error means the secret already exists and needs to be updated
-	return m.UpdateSecret(userID, provider, secret)
+	// An error either means it already exists or something bad happened
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	// The secret doesn't exist so create it
+	data := make(map[string]string)
+	data[provider] = secret
+
+	s := apicorev1.Secret{
+		StringData: data,
+	}
+	s.ObjectMeta = metav1.ObjectMeta{
+		Name:      userID + secretNameEnding,
+		Namespace: SecretNamespace,
+	}
+	_, err = m.secrets.Create(&s)
+
+	return err
 }
 
-func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []v3.Token) (string, error) {
+func (m *Manager) GetSecret(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error) {
 	logrus.Infof("GetSecret for %s in %s", userID, provider)
 	cachedSecret, err := m.secretLister.Get(SecretNamespace, userID+secretNameEnding)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -793,6 +796,13 @@ func (m *Manager) IsMemberOf(token accessor.TokenAccessor, group v3.Principal) b
 	return groups[group.Name]
 }
 
+// CreateTokenAndSetCookie creates a token secret containing the "providerToken"
+// which is the auth token from the upstream provider.
+//
+// The token secret name is put into the R_SESS cookie.
+//
+// This is an API Client token that may be able to used to impersonate the user
+// when communicating with the issuing API.
 func (m *Manager) CreateTokenAndSetCookie(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
 	token, unhashedTokenKey, err := m.NewLoginToken(userID, userPrincipal, groupPrincipals, providerToken, 0, description)
 	if err != nil {
@@ -818,18 +828,23 @@ func (m *Manager) CreateTokenAndSetCookie(userID string, userPrincipal v3.Princi
 	return nil
 }
 
+// CreateTokenAndSetCookieWithAuthToken creates a token secret but which does
+// not contain the auth token from the upstream provider.
+//
+// The token secret name is put into the R_SESS cookie.
+//
+// This is an API Client token that may be able to used to impersonate the user
+// when communicating with the issuing API.
 func (m *Manager) CreateTokenAndSetCookieWithAuthToken(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error {
-	token, unhashedTokenKey, err := m.NewLoginToken(userID, userPrincipal, groupPrincipals, providerToken, 0, description)
+	logrus.Debugf("CreateTokenAndSetCookieWithAuthToken for %s", userID)
+	token, unhashedTokenKey, err := m.NewLoginToken(userID, userPrincipal, groupPrincipals, "", 0, description)
 	if err != nil {
 		logrus.Errorf("Failed creating token with error: %v", err)
 		return httperror.NewAPIErrorLong(500, "", fmt.Sprintf("Failed creating token with error: %v", err))
 	}
+	logrus.Debug("CreateTokenAndSetCookieWithAuthToken created token without the providerToken")
 
-	isSecure := false
-	if request.Request.URL.Scheme == "https" {
-		isSecure = true
-	}
-
+	isSecure := request.Request.URL.Scheme == "https"
 	tokenCookie := &http.Cookie{
 		Name:     CookieName,
 		Value:    token.ObjectMeta.Name + ":" + unhashedTokenKey,
@@ -838,6 +853,15 @@ func (m *Manager) CreateTokenAndSetCookieWithAuthToken(userID string, userPrinci
 		HttpOnly: true,
 	}
 	http.SetCookie(request.Response, tokenCookie)
+
+	http.SetCookie(request.Response, &http.Cookie{
+		Name:     AuthCookieName,
+		Value:    base64.StdEncoding.EncodeToString([]byte(providerToken)),
+		Secure:   isSecure,
+		Path:     "/",
+		HttpOnly: true,
+	})
+
 	request.WriteResponse(http.StatusOK, nil)
 
 	return nil

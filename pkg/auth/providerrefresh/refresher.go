@@ -107,6 +107,9 @@ func (r *refresher) triggerUserRefresh(userName string, force bool) {
 		logrus.Errorf("Error fetching user attribute to trigger refresh: %v", err)
 		return
 	}
+	// TODO: Check to see if we have a stored token to refresh the data with?
+	// CanStoreAuthTokens()
+
 	now := time.Now().UTC()
 	// in the case there is an invalid (or no) last refresh ignore the error, lastrefresh will be 0
 	lastRefresh, _ := time.Parse(time.RFC3339, attribs.LastRefresh)

@@ -37,6 +37,7 @@ type tokensManager interface {
 	GetSecret(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error)
 	IsMemberOf(token accessor.TokenAccessor, group v3.Principal) bool
 	CreateTokenAndSetCookie(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
+	CreateTokenAndSetCookieWithAuthToken(userID string, userPrincipal v3.Principal, groupPrincipals []v3.Principal, providerToken string, ttl int, description string, request *types.APIContext) error
 	UserAttributeCreateOrUpdate(userID, provider string, groupPrincipals []v3.Principal, userExtraInfo map[string][]string, loginTime ...time.Time) error
 }
 
@@ -97,6 +98,8 @@ func (g *ghProvider) CanStoreAuthTokens() (bool, error) {
 		logrus.Errorf("Error fetching github config: %v", err)
 		return false, err
 	}
+
+	logrus.Debugf("githubprovider: CanStoreAuthTokens TeamSyncDisabled = %v", config.TeamSyncDisabled)
 
 	return !config.TeamSyncDisabled, nil
 }
@@ -283,8 +286,8 @@ func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) (
 		return nil, err
 	}
 
-	if config.TeamSyncDisabled {
-		logrus.Debugf("team sync is disabled - not refreshing group principals for %s", principalID)
+	if config.TeamSyncDisabled || secret == "" {
+		logrus.Debugf("githubprovider: team sync is disabled - not refreshing group principals for %s", principalID)
 		return nil, nil
 	}
 
@@ -314,26 +317,34 @@ func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) (
 	return groupPrincipals, nil
 }
 
-func (g *ghProvider) SearchPrincipals(searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
-	var principals []v3.Principal
-	var err error
+func (g *ghProvider) SearchPrincipals(apictx *types.APIContext, searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+	logrus.Debugf("githubprovider: SearchPrincipals called with %s and %s", searchKey, principalType)
 
+	var principals []v3.Principal
 	config, err := g.getConfig()
 	if err != nil {
 		return principals, err
 	}
 
-	accessToken, err := g.tokenMGR.GetSecret(token.GetUserID(), token.GetAuthProvider(), []accessor.TokenAccessor{token})
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return nil, err
+	var accessToken string
+	cookie, err := apictx.Request.Cookie(tokens.AuthCookieName)
+	if err == nil {
+		accessToken = cookie.Value
+		logrus.Debug("githubprovider: SearchPrincipals used accessToken from cookie")
+	} else {
+		_, err := g.tokenMGR.GetSecret(token.GetUserID(), token.GetAuthProvider(), []accessor.TokenAccessor{token})
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return nil, err
+			}
+			accessToken = token.GetProviderInfo()["access_token"]
 		}
-		accessToken = token.GetProviderInfo()["access_token"]
+		logrus.Debug("githubprovider: SearchPrincipals used accessToken from token")
 	}
 
 	accts, err := g.githubClient.searchUsers(searchKey, principalType, accessToken, config)
 	if err != nil {
-		logrus.Errorf("problem searching github: %v", err)
+		logrus.Errorf("githubprovider: Problem searching github: %v", err)
 	}
 
 	for _, acct := range accts {

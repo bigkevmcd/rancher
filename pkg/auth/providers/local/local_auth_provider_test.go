@@ -157,7 +157,8 @@ func TestProviderSearchPrincipal(t *testing.T) {
 
 	for _, tt := range principalSearchTests {
 		t.Run("searchKey "+tt.searchKey, func(t *testing.T) {
-			principals, err := provider.SearchPrincipals(tt.searchKey, "user", &v3.Token{})
+			// nil here is an unused *types.APIContext
+			principals, err := provider.SearchPrincipals(nil, tt.searchKey, "user", &v3.Token{})
 			require.NoError(t, err)
 
 			var names []string
@@ -173,7 +174,8 @@ func TestProviderSearchPrincipal(t *testing.T) {
 
 		// and the same behaviour for ext tokens
 		t.Run("searchKey "+tt.searchKey+", ext ", func(t *testing.T) {
-			principals, err := provider.SearchPrincipals(tt.searchKey, "user", &ext.Token{})
+			// nil here is an unused *types.APIContext
+			principals, err := provider.SearchPrincipals(nil, tt.searchKey, "user", &ext.Token{})
 			require.NoError(t, err)
 
 			var names []string

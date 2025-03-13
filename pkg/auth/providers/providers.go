@@ -225,7 +225,7 @@ func GetPrincipal(principalID string, myToken accessor.TokenAccessor) (v3.Princi
 	return principal, err
 }
 
-func SearchPrincipals(name, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error) {
+func SearchPrincipals(ctx *types.APIContext, name, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error) {
 	ap := myToken.GetAuthProvider()
 	if ap == "" {
 		return []v3.Principal{}, fmt.Errorf("[SearchPrincipals] no authProvider specified in token")
@@ -233,7 +233,7 @@ func SearchPrincipals(name, principalType string, myToken accessor.TokenAccessor
 	if Providers[ap] == nil {
 		return []v3.Principal{}, fmt.Errorf("[SearchPrincipals] authProvider %v not initialized", ap)
 	}
-	principals, err := Providers[ap].SearchPrincipals(name, principalType, myToken)
+	principals, err := Providers[ap].SearchPrincipals(ctx, name, principalType, myToken)
 	if err != nil {
 		return principals, err
 	}

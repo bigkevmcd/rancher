@@ -217,7 +217,7 @@ func (l *Provider) RefetchGroupPrincipals(principalID string, secret string) ([]
 	return l.getGroupPrincipals(user)
 }
 
-func (l *Provider) SearchPrincipals(searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (l *Provider) SearchPrincipals(_ *types.APIContext, searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	return l.SearchPrincipalsDedupe(searchKey, principalType, token, nil)
 }
 

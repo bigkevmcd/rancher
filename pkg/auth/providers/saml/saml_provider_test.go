@@ -103,7 +103,8 @@ func TestSearchPrincipals(t *testing.T) {
 				},
 			}
 
-			results, err := provider.SearchPrincipals(tt.searchKey, tt.principalType, &v3.Token{})
+			// nil is an unused *types.APIContext
+			results, err := provider.SearchPrincipals(nil, tt.searchKey, tt.principalType, &v3.Token{})
 			require.NoError(t, err)
 			require.Len(t, results, len(tt.principals))
 			for _, principal := range results {
@@ -123,7 +124,8 @@ func TestSearchPrincipals(t *testing.T) {
 				},
 			}
 
-			results, err := provider.SearchPrincipals(tt.searchKey, tt.principalType, &ext.Token{})
+			// nil is an unused *types.APIContext
+			results, err := provider.SearchPrincipals(nil, tt.searchKey, tt.principalType, &ext.Token{})
 			require.NoError(t, err)
 			require.Len(t, results, len(tt.principals))
 			for _, principal := range results {
@@ -161,7 +163,7 @@ func (p *mockLdapProvider) AuthenticateUser(ctx context.Context, input interface
 	panic("AuthenticateUser Unimplemented!")
 }
 
-func (p *mockLdapProvider) SearchPrincipals(name, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error) {
+func (p *mockLdapProvider) SearchPrincipals(_ *types.APIContext, name, principalType string, myToken accessor.TokenAccessor) ([]v3.Principal, error) {
 	if !p.isLdapConfigured {
 		return nil, ldap.ErrorNotConfigured{}
 	}
