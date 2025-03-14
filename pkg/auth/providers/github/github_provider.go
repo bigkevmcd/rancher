@@ -284,7 +284,7 @@ func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) (
 		return nil, err
 	}
 
-	if config.TeamSyncDisabled {
+	if config.TeamSyncDisabled || secret == "" {
 		logrus.Debugf("team sync is disabled - not refreshing group principals for %s", principalID)
 		return nil, nil
 	}
