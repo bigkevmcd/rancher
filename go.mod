@@ -138,7 +138,7 @@ require (
 	github.com/rancher/remotedialer v0.4.5-rc.1
 	github.com/rancher/rke v1.8.0-rc.4
 	github.com/rancher/shepherd v0.0.0-20250411212007-f3f2fd268849
-	github.com/rancher/steve v0.6.3
+	github.com/rancher/steve v0.6.4-0.20250513073737-fc5eeae110cc
 	github.com/rancher/system-upgrade-controller/pkg/apis v0.0.0-20250306000150-b1a9781accab
 	github.com/rancher/tests/actions v0.0.0-20250505204226-5b136337f7c5
 	github.com/rancher/wrangler v1.1.2
@@ -251,8 +251,10 @@ require (
 	github.com/skeema/knownhosts v1.2.2 // indirect
 	github.com/std-uritemplate/std-uritemplate/go v0.0.57 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
+	github.com/urfave/cli/v2 v2.27.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
+	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.58.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.28.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.27.0 // indirect
@@ -266,6 +268,7 @@ require (
 	k8s.io/controller-manager v0.0.0 // indirect
 	k8s.io/gengo v0.0.0-20250130153323-76c5745d3511 // indirect
 	k8s.io/gengo/v2 v2.0.0-20240911193312-2b36238f13e9 // indirect
+	k8s.io/klog v1.0.0 // indirect
 	k8s.io/kms v0.32.2 // indirect
 	k8s.io/pod-security-admission v0.32.2 // indirect
 	modernc.org/libc v1.61.13 // indirect
