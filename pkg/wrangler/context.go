@@ -6,8 +6,11 @@ package wrangler
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 
 	fleetv1alpha1api "github.com/rancher/fleet/pkg/apis/fleet.cattle.io/v1alpha1"
@@ -372,7 +375,12 @@ func NewContext(ctx context.Context, clientConfig clientcmd.ClientConfig, restCo
 
 	asl := accesscontrol.NewAccessStore(ctx, true, rbac.Rbac().V1())
 
-	cg, err := client.NewFactory(restConfig, false)
+	qps, burst, err := clientRateLimiting()
+	if err != nil {
+		logrus.Errorf("Configuring rate limiting: %s", err)
+	}
+
+	cg, err := client.NewFactory(restConfig, false, client.WithQPSAndBurst(qps, burst))
 	if err != nil {
 		return nil, err
 	}
@@ -526,4 +534,34 @@ func (s *SimpleRESTClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryI
 
 func (s *SimpleRESTClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 	return s.RESTMapper, nil
+}
+
+const defaultQPS float32 = 10000.0
+const defaultBurst int = 100
+
+func clientRateLimiting() (float32, int, error) {
+	qps := defaultQPS
+	burst := defaultBurst
+
+	if v := os.Getenv("RANCHER_CLIENT_QPS"); v != "" {
+		parsed, err := strconv.ParseFloat(v, 32)
+		if err != nil {
+			return defaultQPS, defaultBurst, fmt.Errorf("parsing RANCHER_CLIENT_QPS: %w", err)
+		} else {
+			logrus.Infof("steve: configuring client.QPS = %v", parsed)
+			qps = float32(parsed)
+		}
+	}
+
+	if v := os.Getenv("RANCHER_CLIENT_BURST"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return defaultQPS, defaultBurst, fmt.Errorf("parsing RANCHER_CLIENT_BURST: %w", err)
+		} else {
+			log.Printf("steve: configuring client.Burst = %v", burst)
+			burst = parsed
+		}
+	}
+
+	return qps, burst, nil
 }
