@@ -42,12 +42,20 @@ type ChangeSet []changes.ResourceChange
 
 // MigrationChanges represents the calculated changes to apply to the cluster.
 type MigrationChanges struct {
+	// Continue is an opaque value used by the Migration to allow batching.
+	// When a Migration has no more changes to apply, it should return an empty
+	// Continue value.
 	Continue string
-	Changes  []ChangeSet
+
+	// Changes is the set of ChangeSets to apply.
+	// This might be a ChangeSet per original resource or could represent a set
+	// of new resources to be created.
+	Changes []ChangeSet
 }
 
 // Migration implementations can be registered with the system.
 type Migration interface {
+	// Name is used to record the state of the migration.
 	Name() string
 
 	// Changes should return the set of changes that this migration wants to
