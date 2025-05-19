@@ -47,8 +47,8 @@ type PatchOperation struct {
 // PatchChange is a patch update to a resource.
 type PatchChange struct {
 	ResourceRef ResourceReference `json:"resourceRef"`
-	Operations  []PatchOperation  `json:"operations"`
-	MergePatch  map[string]any    `json:"mergePatch"`
+	Operations  []PatchOperation  `json:"operations,omitempty"`
+	MergePatch  map[string]any    `json:"mergePatch,omitempty"`
 	Type        string            `json:"type"`
 }
 
