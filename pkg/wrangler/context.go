@@ -375,12 +375,12 @@ func NewContext(ctx context.Context, clientConfig clientcmd.ClientConfig, restCo
 
 	asl := accesscontrol.NewAccessStore(ctx, true, rbac.Rbac().V1())
 
-	qps, burst, err := clientRateLimiting()
+	rl, err := clientRateLimiting()
 	if err != nil {
 		logrus.Errorf("Configuring rate limiting: %s", err)
 	}
 
-	cg, err := client.NewFactory(restConfig, false, client.WithQPSAndBurst(qps, burst))
+	cg, err := client.NewFactory(restConfig, false, client.WithQPSAndBurst(rl.qps, rl.burst, rl.shared))
 	if err != nil {
 		return nil, err
 	}
@@ -539,29 +539,47 @@ func (s *SimpleRESTClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 const defaultQPS float32 = 10000.0
 const defaultBurst int = 100
 
-func clientRateLimiting() (float32, int, error) {
-	qps := defaultQPS
-	burst := defaultBurst
+type rateLimitingOpts struct {
+	qps    float32
+	burst  int
+	shared bool
+}
+
+func clientRateLimiting() (*rateLimitingOpts, error) {
+	opts := &rateLimitingOpts{
+		qps:   defaultQPS,
+		burst: defaultBurst,
+	}
 
 	if v := os.Getenv("RANCHER_CLIENT_QPS"); v != "" {
 		parsed, err := strconv.ParseFloat(v, 32)
 		if err != nil {
-			return defaultQPS, defaultBurst, fmt.Errorf("parsing RANCHER_CLIENT_QPS: %w", err)
+			return opts, fmt.Errorf("parsing RANCHER_CLIENT_QPS: %w", err)
 		} else {
-			logrus.Infof("steve: configuring client.QPS = %v", parsed)
-			qps = float32(parsed)
+			logrus.Infof("configuring client.QPS = %v", parsed)
+			opts.qps = float32(parsed)
 		}
 	}
 
 	if v := os.Getenv("RANCHER_CLIENT_BURST"); v != "" {
 		parsed, err := strconv.Atoi(v)
 		if err != nil {
-			return defaultQPS, defaultBurst, fmt.Errorf("parsing RANCHER_CLIENT_BURST: %w", err)
+			return opts, fmt.Errorf("parsing RANCHER_CLIENT_BURST: %w", err)
 		} else {
-			log.Printf("steve: configuring client.Burst = %v", burst)
-			burst = parsed
+			log.Printf("configuring client.Burst = %v", parsed)
+			opts.burst = parsed
 		}
 	}
 
-	return qps, burst, nil
+	if v := os.Getenv("RANCHER_CLIENT_SHARED_RATELIMIT"); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			return opts, fmt.Errorf("parsing RANCHER_CLIENT_SHARED_RATELIMIT: %w", err)
+		} else {
+			log.Printf("configuring client.RateLimiter as shared %v", parsed)
+			opts.shared = parsed
+		}
+	}
+
+	return opts, nil
 }

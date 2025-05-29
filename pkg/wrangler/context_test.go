@@ -4,54 +4,68 @@ import "testing"
 
 func TestRateLimiting(t *testing.T) {
 	rlTests := map[string]struct {
-		qps   string
-		burst string
+		env map[string]string
 
-		wantQPS   float32
-		wantBurst int
+		wantQPS    float32
+		wantBurst  int
+		wantShared bool
 	}{
 		"not providing any settings": {
 			wantQPS:   defaultQPS,
 			wantBurst: defaultBurst,
 		},
 		"providing burst and qps": {
-			qps:       "250",
-			burst:     "90",
+			env: map[string]string{
+				"RANCHER_CLIENT_QPS":   "250",
+				"RANCHER_CLIENT_BURST": "90",
+			},
 			wantQPS:   250,
 			wantBurst: 90,
 		},
 		"providing qps": {
-			qps:       "250",
+			env: map[string]string{
+				"RANCHER_CLIENT_QPS": "250",
+			},
 			wantQPS:   250,
 			wantBurst: defaultBurst,
 		},
 		"providing burst": {
-			burst:     "90",
+			env: map[string]string{
+				"RANCHER_CLIENT_BURST": "90",
+			},
 			wantQPS:   defaultQPS,
 			wantBurst: 90,
+		},
+		"providing shared qps var": {
+			env: map[string]string{
+				"RANCHER_CLIENT_SHARED_RATELIMIT": "true",
+			},
+			wantQPS:    defaultQPS,
+			wantBurst:  defaultBurst,
+			wantShared: true,
 		},
 	}
 
 	for name, tt := range rlTests {
 		t.Run(name, func(t *testing.T) {
-			if tt.qps != "" {
-				t.Setenv("RANCHER_CLIENT_QPS", tt.qps)
-			}
-			if tt.burst != "" {
-				t.Setenv("RANCHER_CLIENT_BURST", tt.burst)
+			for k, v := range tt.env {
+				t.Setenv(k, v)
 			}
 
-			qps, burst, err := clientRateLimiting()
+			rl, err := clientRateLimiting()
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if qps != tt.wantQPS {
-				t.Errorf("clientRateLimiting() qps got %v, want %v", qps, tt.wantQPS)
+			if rl.qps != tt.wantQPS {
+				t.Errorf("clientRateLimiting() qps got %v, want %v", rl.qps, tt.wantQPS)
 			}
 
-			if burst != tt.wantBurst {
-				t.Errorf("clientRateLimiting() burst got %v, want %v", burst, tt.wantBurst)
+			if rl.burst != tt.wantBurst {
+				t.Errorf("clientRateLimiting() burst got %v, want %v", rl.burst, tt.wantBurst)
+			}
+			if rl.shared != tt.wantShared {
+				t.Errorf("clientRateLimiting() shared got %v, want %v", rl.shared, tt.wantShared)
 			}
 		})
 	}
@@ -59,49 +73,57 @@ func TestRateLimiting(t *testing.T) {
 
 func TestRateLimitingErrors(t *testing.T) {
 	rlTests := map[string]struct {
-		qps   string
-		burst string
+		env map[string]string
 
 		wantQPS   float32
 		wantBurst int
 		wantErr   string
 	}{
 		"invalid burst": {
-			qps:       "300",
-			burst:     "bad value",
-			wantQPS:   defaultQPS,
+			env: map[string]string{
+				"RANCHER_CLIENT_BURST": "bad value",
+				"RANCHER_CLIENT_QPS":   "300",
+			},
+			wantQPS:   300,
 			wantBurst: defaultBurst,
 			wantErr:   `parsing RANCHER_CLIENT_BURST: strconv.Atoi: parsing "bad value": invalid syntax`,
 		},
 		"invalid qps": {
-			burst:     "300",
-			qps:       "bad value",
+			env: map[string]string{
+				"RANCHER_CLIENT_BURST": "300",
+				"RANCHER_CLIENT_QPS":   "bad value",
+			},
 			wantQPS:   defaultQPS,
 			wantBurst: defaultBurst,
 			wantErr:   `parsing RANCHER_CLIENT_QPS: strconv.ParseFloat: parsing "bad value": invalid syntax`,
+		},
+		"invalid shared configuration": {
+			env: map[string]string{
+				"RANCHER_CLIENT_SHARED_RATELIMIT": "bad value",
+			},
+			wantQPS:   defaultQPS,
+			wantBurst: defaultBurst,
+			wantErr:   `parsing RANCHER_CLIENT_SHARED_RATELIMIT: strconv.ParseBool: parsing "bad value": invalid syntax`,
 		},
 	}
 
 	for name, tt := range rlTests {
 		t.Run(name, func(t *testing.T) {
-			if tt.qps != "" {
-				t.Setenv("RANCHER_CLIENT_QPS", tt.qps)
-			}
-			if tt.burst != "" {
-				t.Setenv("RANCHER_CLIENT_BURST", tt.burst)
+			for k, v := range tt.env {
+				t.Setenv(k, v)
 			}
 
-			qps, burst, err := clientRateLimiting()
+			rl, err := clientRateLimiting()
 			if err.Error() != tt.wantErr {
 				t.Errorf("clientRateLimiting() got error %v, want %v", err, tt.wantErr)
 			}
 
-			if qps != tt.wantQPS {
-				t.Errorf("clientRateLimiting() qps got %v, want %v", qps, tt.wantQPS)
+			if rl.qps != tt.wantQPS {
+				t.Errorf("clientRateLimiting() qps got %v, want %v", rl.qps, tt.wantQPS)
 			}
 
-			if burst != tt.wantBurst {
-				t.Errorf("clientRateLimiting() burst got %v, want %v", burst, tt.wantBurst)
+			if rl.burst != tt.wantBurst {
+				t.Errorf("clientRateLimiting() burst got %v, want %v", rl.burst, tt.wantBurst)
 			}
 		})
 	}
