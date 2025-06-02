@@ -188,6 +188,7 @@ func (g *ghProvider) AuthenticateUser(ctx context.Context, input interface{}) (v
 	if ok {
 		host = util.GetHost(req)
 	}
+
 	return g.LoginUser(host, login, nil, false)
 }
 
@@ -224,9 +225,11 @@ func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, c
 	config = choseClientID(host, config)
 	securityCode := githubCredential.Code
 
+	logrus.Debugf("githubprovider: LoginUser %s %#v", host, githubCredential)
+
 	accessToken, err := g.githubClient.getAccessToken(securityCode, config)
 	if err != nil {
-		logrus.Infof("Error generating accessToken from github %v", err)
+		logrus.Errorf("Generating accessToken from github %v", err)
 		return v3.Principal{}, nil, "", err
 	}
 

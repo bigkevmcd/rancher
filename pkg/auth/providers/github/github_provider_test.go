@@ -13,6 +13,7 @@ import (
 	ext "github.com/rancher/rancher/pkg/apis/ext.cattle.io/v1"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
+	"github.com/rancher/rancher/pkg/auth/tokens"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -169,8 +170,7 @@ func TestSearchPrincipals(t *testing.T) {
 	}
 
 	// Search for groups and users.
-	// TODO: KEVIN
-	found, err := provider.SearchPrincipals(nil, "dev", "", &token)
+	found, err := provider.SearchPrincipals(newTestAPIContext(), "dev", "", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,8 +214,7 @@ func TestSearchPrincipals(t *testing.T) {
 	}
 
 	// Search for groups only.
-	// TODO: KEVIN
-	found, err = provider.SearchPrincipals(nil, "dev", "group", &token)
+	found, err = provider.SearchPrincipals(newTestAPIContext(), "dev", "group", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,8 +232,7 @@ func TestSearchPrincipals(t *testing.T) {
 	}
 
 	// Search for users only.
-	// TODO: KEVIN
-	found, err = provider.SearchPrincipals(nil, "dev", "user", &token)
+	found, err = provider.SearchPrincipals(newTestAPIContext(), "dev", "user", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,8 +358,7 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	}
 
 	// Search for groups and users.
-	// TODO: KEVIN
-	found, err := provider.SearchPrincipals(nil, "dev", "", &token)
+	found, err := provider.SearchPrincipals(newTestAPIContext(), "dev", "", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,8 +402,7 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	}
 
 	// Search for groups only.
-	// TODO: KEVIN
-	found, err = provider.SearchPrincipals(nil, "dev", "group", &token)
+	found, err = provider.SearchPrincipals(newTestAPIContext(), "dev", "group", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,8 +420,7 @@ func TestSearchPrincipalsExt(t *testing.T) {
 	}
 
 	// Search for users only.
-	// TODO: KEVIN
-	found, err = provider.SearchPrincipals(nil, "dev", "user", &token)
+	found, err = provider.SearchPrincipals(newTestAPIContext(), "dev", "user", &token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -600,4 +595,16 @@ func startFakeGithubServer(t *testing.T, data fakeGithubData) *httptest.Server {
 	})
 
 	return srv
+}
+
+func newTestAPIContext() *types.APIContext {
+	r := httptest.NewRequest("", "/login", nil)
+	r.AddCookie(&http.Cookie{
+		Name:     tokens.AuthCookieName,
+		Value:    "test-cookie",
+		Secure:   true,
+		Path:     "/",
+		HttpOnly: true,
+	})
+	return &types.APIContext{Request: r}
 }
