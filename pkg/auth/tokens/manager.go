@@ -50,7 +50,7 @@ const (
 )
 
 var (
-	toDeleteCookies = []string{CookieName, CSRFCookie}
+	toDeleteCookies = []string{CookieName, CSRFCookie, AuthCookieName}
 	onLogoutAll     LogoutAllFunc
 	onLogout        LogoutFunc
 )
