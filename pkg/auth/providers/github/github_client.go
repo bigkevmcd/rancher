@@ -26,7 +26,6 @@ type GClient struct {
 }
 
 func (g *GClient) getAccessToken(code string, config *v32.GithubConfig) (string, error) {
-
 	form := url.Values{}
 	form.Add("client_id", config.ClientID)
 	form.Add("client_secret", config.ClientSecret)
@@ -55,11 +54,11 @@ func (g *GClient) getAccessToken(code string, config *v32.GithubConfig) (string,
 	if !ok {
 		return "", fmt.Errorf("github getAccessToken: received error reading accessToken from response %v", respMap)
 	}
+
 	return acessToken, nil
 }
 
 func (g *GClient) getUser(githubAccessToken string, config *v32.GithubConfig) (Account, error) {
-
 	url := g.getURL("USER_INFO", config)
 	b, _, err := g.getFromGithub(githubAccessToken, url)
 	if err != nil {

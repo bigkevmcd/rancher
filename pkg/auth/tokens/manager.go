@@ -832,6 +832,7 @@ func (m *Manager) CreateTokenAndSetCookie(userID string, userPrincipal v3.Princi
 // not contain the auth token from the upstream provider.
 //
 // The token secret name is put into the R_SESS cookie.
+// The auth token is put into the R_AUTH cookie
 //
 // This is an API Client token that may be able to used to impersonate the user
 // when communicating with the issuing API.

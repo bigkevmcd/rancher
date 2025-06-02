@@ -39,10 +39,6 @@ import (
 	"k8s.io/utils/pointer"
 )
 
-const (
-	CookieName = "R_SESS"
-)
-
 func newLoginHandler(ctx context.Context, mgmt *config.ScaledContext) *loginHandler {
 	return &loginHandler{
 		scaledContext: mgmt,
@@ -65,6 +61,7 @@ func (h *loginHandler) login(actionName string, action *types.Action, request *t
 	if actionName != "login" {
 		return httperror.NewAPIError(httperror.ActionNotAvailable, "")
 	}
+	logrus.Debugf("loginHandler: login called")
 
 	w := request.Response
 	token, unhashedTokenKey, responseType, err := h.createLoginToken(request)
@@ -82,7 +79,7 @@ func (h *loginHandler) login(actionName string, action *types.Action, request *t
 		return nil
 	case "cookie":
 		tokenCookie := &http.Cookie{
-			Name:     CookieName,
+			Name:     tokens.CookieName,
 			Value:    token.ObjectMeta.Name + ":" + unhashedTokenKey,
 			Secure:   true,
 			Path:     "/",
@@ -106,7 +103,7 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 	var userPrincipal v3.Principal
 	var groupPrincipals []v3.Principal
 	var providerToken string
-	logrus.Debugf("Create Token Invoked")
+	logrus.Debugf("loginHandler: createLoginToken invoked")
 
 	bytes, err := io.ReadAll(request.Request.Body)
 	if err != nil {
@@ -265,6 +262,15 @@ func (h *loginHandler) createLoginToken(request *types.APIContext) (v3.Token, st
 	canStore, _ := providers.CanStoreAuthTokens(providerName)
 	if !canStore {
 		logrus.Debugf("createLoginToken: not storing login token for provider %s", providerName)
+		// TODO: Where should this go? The caller sets the R_SESS cookie.
+		tokenCookie := &http.Cookie{
+			Name:     tokens.AuthCookieName,
+			Value:    providerToken,
+			Secure:   true,
+			Path:     "/",
+			HttpOnly: true,
+		}
+		http.SetCookie(request.Response, tokenCookie)
 		providerToken = ""
 	}
 
