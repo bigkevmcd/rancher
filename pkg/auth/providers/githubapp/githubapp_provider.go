@@ -30,7 +30,8 @@ import (
 )
 
 const (
-	Name = "github"
+	// Name is used to reference the Provider.
+	Name = "githubapp"
 )
 
 type tokensManager interface {
