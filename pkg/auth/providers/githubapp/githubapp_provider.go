@@ -41,7 +41,7 @@ type tokensManager interface {
 	UserAttributeCreateOrUpdate(userID, provider string, groupPrincipals []v3.Principal, userExtraInfo map[string][]string, loginTime ...time.Time) error
 }
 
-type ghProvider struct {
+type ghAppProvider struct {
 	ctx          context.Context
 	authConfigs  v3.AuthConfigInterface
 	secrets      wcorev1.SecretController
@@ -56,7 +56,7 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 		httpClient: &http.Client{},
 	}
 
-	provider := &ghProvider{
+	provider := &ghAppProvider{
 		ctx:          ctx,
 		authConfigs:  mgmtCtx.Management.AuthConfigs(""),
 		secrets:      mgmtCtx.Wrangler.Core.Secret(),
@@ -69,30 +69,30 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 	return provider
 }
 
-func (g *ghProvider) LogoutAll(apiContext *types.APIContext, token accessor.TokenAccessor) error {
+func (g *ghAppProvider) LogoutAll(apiContext *types.APIContext, token accessor.TokenAccessor) error {
 	return nil
 }
 
-func (g *ghProvider) Logout(apiContext *types.APIContext, token accessor.TokenAccessor) error {
+func (g *ghAppProvider) Logout(apiContext *types.APIContext, token accessor.TokenAccessor) error {
 	return nil
 }
 
-func (g *ghProvider) GetName() string {
+func (g *ghAppProvider) GetName() string {
 	return Name
 }
 
-func (g *ghProvider) CustomizeSchema(schema *types.Schema) {
+func (g *ghAppProvider) CustomizeSchema(schema *types.Schema) {
 	schema.ActionHandler = g.actionHandler
 	schema.Formatter = g.formatter
 }
 
-func (g *ghProvider) TransformToAuthProvider(authConfig map[string]interface{}) (map[string]interface{}, error) {
+func (g *ghAppProvider) TransformToAuthProvider(authConfig map[string]interface{}) (map[string]interface{}, error) {
 	p := common.TransformToAuthProvider(authConfig)
 	p[publicclient.GithubProviderFieldRedirectURL] = formGithubRedirectURLFromMap(authConfig)
 	return p, nil
 }
 
-func (g *ghProvider) getGithubAppConfigCR() (*v32.GithubAppConfig, error) {
+func (g *ghAppProvider) getGithubAppConfigCR() (*v32.GithubAppConfig, error) {
 	authConfigObj, err := g.authConfigs.ObjectClient().UnstructuredClient().Get(Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("getting GithubAppConfig, error: %v", err)
@@ -129,7 +129,7 @@ func (g *ghProvider) getGithubAppConfigCR() (*v32.GithubAppConfig, error) {
 	return storedGithubAppConfig, nil
 }
 
-func (g *ghProvider) saveGithubAppConfig(config *v32.GithubAppConfig) error {
+func (g *ghAppProvider) saveGithubAppConfig(config *v32.GithubAppConfig) error {
 	storedGithubAppConfig, err := g.getGithubAppConfigCR()
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ func (g *ghProvider) saveGithubAppConfig(config *v32.GithubAppConfig) error {
 	return nil
 }
 
-func (g *ghProvider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
+func (g *ghAppProvider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
 	login, ok := input.(*v32.GithubLogin)
 	if !ok {
 		return v3.Principal{}, nil, "", errors.New("unexpected input type")
@@ -186,7 +186,7 @@ func choseClientID(host string, config *v32.GithubAppConfig) *v32.GithubAppConfi
 	return &copy
 }
 
-func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, config *v32.GithubAppConfig, test bool) (v3.Principal, []v3.Principal, string, error) {
+func (g *ghAppProvider) LoginUser(host string, githubCredential *v32.GithubLogin, config *v32.GithubAppConfig, test bool) (v3.Principal, []v3.Principal, string, error) {
 	var groupPrincipals []v3.Principal
 	var userPrincipal v3.Principal
 	var err error
@@ -200,6 +200,8 @@ func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, c
 
 	config = choseClientID(host, config)
 	securityCode := githubCredential.Code
+
+	logrus.Info("ghAppProvider.LoginUser")
 
 	accessToken, err := g.githubClient.getAccessToken(securityCode, config)
 	if err != nil {
@@ -250,7 +252,7 @@ func (g *ghProvider) LoginUser(host string, githubCredential *v32.GithubLogin, c
 	return userPrincipal, groupPrincipals, accessToken, nil
 }
 
-func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) ([]v3.Principal, error) {
+func (g *ghAppProvider) RefetchGroupPrincipals(principalID string, secret string) ([]v3.Principal, error) {
 	var groupPrincipals []v3.Principal
 	var err error
 	var config *v32.GithubAppConfig
@@ -283,7 +285,7 @@ func (g *ghProvider) RefetchGroupPrincipals(principalID string, secret string) (
 	return groupPrincipals, nil
 }
 
-func (g *ghProvider) SearchPrincipals(searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
+func (g *ghAppProvider) SearchPrincipals(searchKey, principalType string, token accessor.TokenAccessor) ([]v3.Principal, error) {
 	var principals []v3.Principal
 	var err error
 
@@ -336,7 +338,7 @@ const (
 	orgType  = "org"
 )
 
-func (g *ghProvider) GetPrincipal(principalID string, token accessor.TokenAccessor) (v3.Principal, error) {
+func (g *ghAppProvider) GetPrincipal(principalID string, token accessor.TokenAccessor) (v3.Principal, error) {
 	config, err := g.getConfig()
 	if err != nil {
 		return v3.Principal{}, err
@@ -382,7 +384,7 @@ func (g *ghProvider) GetPrincipal(principalID string, token accessor.TokenAccess
 	return princ, nil
 }
 
-func (g *ghProvider) toPrincipal(principalType string, acct Account, token accessor.TokenAccessor) v3.Principal {
+func (g *ghAppProvider) toPrincipal(principalType string, acct Account, token accessor.TokenAccessor) v3.Principal {
 	displayName := acct.Name
 	if displayName == "" {
 		displayName = acct.Login
@@ -412,7 +414,7 @@ func (g *ghProvider) toPrincipal(principalType string, acct Account, token acces
 	return princ
 }
 
-func (g *ghProvider) CanAccessWithGroupProviders(userPrincipalID string, groupPrincipals []v3.Principal) (bool, error) {
+func (g *ghAppProvider) CanAccessWithGroupProviders(userPrincipalID string, groupPrincipals []v3.Principal) (bool, error) {
 	config, err := g.getConfig()
 	if err != nil {
 		logrus.Errorf("Error fetching github config: %v", err)
@@ -425,12 +427,12 @@ func (g *ghProvider) CanAccessWithGroupProviders(userPrincipalID string, groupPr
 	return allowed, nil
 }
 
-func (g *ghProvider) GetUserExtraAttributes(userPrincipal v3.Principal) map[string][]string {
+func (g *ghAppProvider) GetUserExtraAttributes(userPrincipal v3.Principal) map[string][]string {
 	return common.GetCommonUserExtraAttributes(userPrincipal)
 }
 
 // IsDisabledProvider checks if the GitHub auth provider is currently disabled in Rancher.
-func (g *ghProvider) IsDisabledProvider() (bool, error) {
+func (g *ghAppProvider) IsDisabledProvider() (bool, error) {
 	ghConfig, err := g.getConfig()
 	if err != nil {
 		return false, err

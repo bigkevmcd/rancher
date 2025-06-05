@@ -142,7 +142,7 @@ func TestSearchPrincipals(t *testing.T) {
 		Hostname: srvURL.Host,
 	}
 
-	provider := ghProvider{
+	provider := ghAppProvider{
 		ctx:          context.Background(),
 		githubClient: &GClient{httpClient: srv.Client()},
 		getConfig:    func() (*v32.GithubAppConfig, error) { return config, nil },
@@ -165,8 +165,8 @@ func TestSearchPrincipals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want, got := 3, len(found); want != got {
-		t.Fatalf("Expected principals %d got %d", want, got)
+	if got := len(found); got != 3 {
+		t.Fatalf("got %d principals want 3", got)
 	}
 
 	for _, p := range found {
@@ -330,7 +330,7 @@ func TestSearchPrincipalsExt(t *testing.T) {
 		Hostname: srvURL.Host,
 	}
 
-	provider := ghProvider{
+	provider := ghAppProvider{
 		ctx:          context.Background(),
 		githubClient: &GClient{httpClient: srv.Client()},
 		getConfig:    func() (*v32.GithubAppConfig, error) { return config, nil },
