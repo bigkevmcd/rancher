@@ -2,19 +2,20 @@ package githubapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/rancher/norman/httperror"
 	"github.com/rancher/norman/types"
 	"github.com/rancher/norman/types/convert"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
 	"github.com/rancher/rancher/pkg/auth/providers/common"
+	"github.com/rancher/rancher/pkg/auth/providers/github"
 	"github.com/rancher/rancher/pkg/auth/tokens"
 	util2 "github.com/rancher/rancher/pkg/auth/util"
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
@@ -253,7 +254,6 @@ func (g *ghAppProvider) LoginUser(host string, githubCredential *v32.GithubLogin
 }
 
 func (g *ghAppProvider) RefetchGroupPrincipals(principalID string, secret string) ([]v3.Principal, error) {
-	var groupPrincipals []v3.Principal
 	var err error
 	var config *v32.GithubAppConfig
 
@@ -262,9 +262,14 @@ func (g *ghAppProvider) RefetchGroupPrincipals(principalID string, secret string
 		return nil, err
 	}
 
+	return g.getGroupPrincipals(secret, config)
+}
+
+func (g *ghAppProvider) getGroupPrincipals(secret string, config *v32.GithubAppConfig) ([]v3.Principal, error) {
+	var groupPrincipals []v3.Principal
 	orgAccts, err := g.githubClient.getOrgs(secret, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting orgs: %w", err)
 	}
 	for _, orgAcct := range orgAccts {
 		groupPrincipal := g.toPrincipal(orgType, orgAcct, nil)
@@ -274,7 +279,7 @@ func (g *ghAppProvider) RefetchGroupPrincipals(principalID string, secret string
 
 	teamAccts, err := g.githubClient.getTeams(secret, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting teams: %w", err)
 	}
 	for _, teamAcct := range teamAccts {
 		groupPrincipal := g.toPrincipal(teamType, teamAcct, nil)
@@ -355,12 +360,12 @@ func (g *ghAppProvider) GetPrincipal(principalID string, token accessor.TokenAcc
 	var externalID string
 	parts := strings.SplitN(principalID, ":", 2)
 	if len(parts) != 2 {
-		return v3.Principal{}, errors.Errorf("invalid id %v", principalID)
+		return v3.Principal{}, fmt.Errorf("invalid id %v", principalID)
 	}
 	externalID = strings.TrimPrefix(parts[1], "//")
 	parts = strings.SplitN(parts[0], "_", 2)
 	if len(parts) != 2 {
-		return v3.Principal{}, errors.Errorf("invalid id %v", principalID)
+		return v3.Principal{}, fmt.Errorf("invalid id %v", principalID)
 	}
 
 	principalType := parts[1]
@@ -390,8 +395,11 @@ func (g *ghAppProvider) toPrincipal(principalType string, acct Account, token ac
 		displayName = acct.Login
 	}
 
+	// NOTE: This uses the same principal IDs as the GitHub provider.
+	// This is to ease the transition from the github provider to the githubapp
+	// provider.
 	princ := v3.Principal{
-		ObjectMeta:     metav1.ObjectMeta{Name: Name + "_" + principalType + "://" + strconv.Itoa(acct.ID)},
+		ObjectMeta:     metav1.ObjectMeta{Name: github.Name + "_" + principalType + "://" + strconv.Itoa(acct.ID)},
 		DisplayName:    displayName,
 		LoginName:      acct.Login,
 		Provider:       Name,
