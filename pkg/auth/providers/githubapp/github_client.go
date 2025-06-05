@@ -76,7 +76,6 @@ func (g *GClient) getAccessToken(code string, config *mgmtv3.GithubAppConfig) (s
 }
 
 func (g *GClient) getUser(githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
-
 	url := g.getURL("USER_INFO", config)
 	b, _, err := g.getFromGithub(githubAccessToken, url)
 	if err != nil {
