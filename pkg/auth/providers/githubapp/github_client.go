@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"strings"
 
-	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/tomnomnom/linkheader"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/github"
 )
 
 const (
@@ -25,8 +27,23 @@ type GClient struct {
 	httpClient *http.Client
 }
 
-func (g *GClient) getAccessToken(code string, config *v32.GithubAppConfig) (string, error) {
+func (g *GClient) getOAuthAccessToken(code string, config *mgmtv3.GithubAppConfig) *oauth2.Config {
+	endpoint := github.Endpoint
+	if config.Hostname != "" {
+		endpoint = oauth2.Endpoint{
+			AuthURL:  "https://" + config.Hostname + "/login/oauth/authorize",
+			TokenURL: "https://" + config.Hostname + "/login/oauth/access_token",
+		}
+	}
 
+	return &oauth2.Config{
+		ClientID:     config.ClientID,
+		ClientSecret: config.ClientSecret,
+		Endpoint:     endpoint,
+	}
+}
+
+func (g *GClient) getAccessToken(code string, config *mgmtv3.GithubAppConfig) (string, error) {
 	form := url.Values{}
 	form.Add("client_id", config.ClientID)
 	form.Add("client_secret", config.ClientSecret)
@@ -58,7 +75,7 @@ func (g *GClient) getAccessToken(code string, config *v32.GithubAppConfig) (stri
 	return acessToken, nil
 }
 
-func (g *GClient) getUser(githubAccessToken string, config *v32.GithubAppConfig) (Account, error) {
+func (g *GClient) getUser(githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
 
 	url := g.getURL("USER_INFO", config)
 	b, _, err := g.getFromGithub(githubAccessToken, url)
@@ -76,7 +93,7 @@ func (g *GClient) getUser(githubAccessToken string, config *v32.GithubAppConfig)
 	return githubAcct, nil
 }
 
-func (g *GClient) getOrgs(githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error) {
+func (g *GClient) getOrgs(githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	var orgs []Account
 
 	url := g.getURL("ORG_INFO", config)
@@ -98,7 +115,7 @@ func (g *GClient) getOrgs(githubAccessToken string, config *v32.GithubAppConfig)
 	return orgs, nil
 }
 
-func (g *GClient) getTeams(githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error) {
+func (g *GClient) getTeams(githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	var teams []Account
 
 	url := g.getURL("TEAMS", config)
@@ -109,7 +126,6 @@ func (g *GClient) getTeams(githubAccessToken string, config *v32.GithubAppConfig
 	}
 	for _, response := range responses {
 		teamObjs, err := g.getTeamInfo(response, config)
-
 		if err != nil {
 			logrus.Errorf("Github getGithubTeams: received error unmarshalling teams array, err: %v", err)
 			return teams, err
@@ -121,7 +137,7 @@ func (g *GClient) getTeams(githubAccessToken string, config *v32.GithubAppConfig
 }
 
 // getOrgTeams returns the teams belonging to an organization.
-func (g *GClient) getOrgTeams(githubAccessToken string, config *v32.GithubAppConfig, org Account) ([]Account, error) {
+func (g *GClient) getOrgTeams(githubAccessToken string, config *mgmtv3.GithubAppConfig, org Account) ([]Account, error) {
 	url := fmt.Sprintf(g.getURL("ORG_TEAMS", config), url.PathEscape(org.Login))
 	responses, err := g.paginateGithub(githubAccessToken, url)
 	if err != nil {
@@ -143,7 +159,7 @@ func (g *GClient) getOrgTeams(githubAccessToken string, config *v32.GithubAppCon
 }
 
 // getOrgTeamInfo is similar to getTeamInfo but takes an org as an argument.
-func (g *GClient) getOrgTeamInfo(b []byte, config *v32.GithubAppConfig, org Account) ([]Account, error) {
+func (g *GClient) getOrgTeamInfo(b []byte, config *mgmtv3.GithubAppConfig, org Account) ([]Account, error) {
 	var teams []Account
 	var teamObjs []Team
 	if err := json.Unmarshal(b, &teamObjs); err != nil {
@@ -165,7 +181,7 @@ func (g *GClient) getOrgTeamInfo(b []byte, config *v32.GithubAppConfig, org Acco
 	return teams, nil
 }
 
-func (g *GClient) getTeamInfo(b []byte, config *v32.GithubAppConfig) ([]Account, error) {
+func (g *GClient) getTeamInfo(b []byte, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	var teams []Account
 	var teamObjs []Team
 	if err := json.Unmarshal(b, &teamObjs); err != nil {
@@ -183,7 +199,7 @@ func (g *GClient) getTeamInfo(b []byte, config *v32.GithubAppConfig) ([]Account,
 	return teams, nil
 }
 
-func (g *GClient) getTeamByID(id string, githubAccessToken string, config *v32.GithubAppConfig) (Account, error) {
+func (g *GClient) getTeamByID(id string, githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
 	var teamAcct Account
 
 	url := g.getURL("TEAM", config) + id
@@ -234,7 +250,7 @@ func (g *GClient) nextGithubPage(response *http.Response) string {
 	return ""
 }
 
-func (g *GClient) searchUsers(searchTerm, searchType string, githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error) {
+func (g *GClient) searchUsers(searchTerm, searchType string, githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	if searchType == "group" {
 		searchType = orgType
 	}
@@ -262,7 +278,7 @@ func (g *GClient) searchUsers(searchTerm, searchType string, githubAccessToken s
 
 // searchTeams searches for teams that match the search term in the organizations the access token has access to.
 // At the moment it only does a case-insensitive prefix match on the team's name.
-func (g *GClient) searchTeams(searchTerm, githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error) {
+func (g *GClient) searchTeams(searchTerm, githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	orgs, err := g.getOrgs(githubAccessToken, config)
 	if err != nil {
 		return nil, err
@@ -290,7 +306,7 @@ func (g *GClient) searchTeams(searchTerm, githubAccessToken string, config *v32.
 	return matches, nil
 }
 
-func (g *GClient) getUserOrgByID(id string, githubAccessToken string, config *v32.GithubAppConfig) (Account, error) {
+func (g *GClient) getUserOrgByID(id string, githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
 	url := g.getURL("USER_INFO", config) + "/" + id
 
 	b, _, err := g.getFromGithub(githubAccessToken, url)
@@ -376,7 +392,7 @@ func (g *GClient) getFromGithub(githubAccessToken string, url string) ([]byte, s
 	return b, nextURL, err
 }
 
-func (g *GClient) getURL(endpoint string, config *v32.GithubAppConfig) string {
+func (g *GClient) getURL(endpoint string, config *mgmtv3.GithubAppConfig) string {
 	var hostName, apiEndpoint, toReturn string
 
 	if config.Hostname != "" {
