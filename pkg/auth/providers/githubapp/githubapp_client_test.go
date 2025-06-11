@@ -1,55 +1,42 @@
 package githubapp
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
+	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"golang.org/x/oauth2"
 )
 
 func TestMockOAuth(t *testing.T) {
-	srv := httptest.NewServer(newFakeOAuthServer())
+	srv := httptest.NewServer(newFakeOAuthServer(t,
+		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing")))
 	defer srv.Close()
 
-	token, err := newOAuthConf(srv.URL).Exchange(context.TODO(), "testing")
+	appClient := githubAppClient{httpClient: http.DefaultClient}
+	token, err := appClient.getAccessToken("1234567", &mgmtv3.GithubAppConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if token != nil {
-		t.Errorf("did not get a token %#v", token)
+	// token, err := newOAuthConf(srv.URL).Exchange(context.TODO(), "1234567")
+
+	if token == "" {
+		t.Error("did not get a token")
 	}
 
 }
 
 func newOAuthConf(url string) *oauth2.Config {
 	return &oauth2.Config{
-		ClientID:     "CLIENT_ID",
-		ClientSecret: "CLIENT_SECRET",
-		RedirectURL:  "REDIRECT_URL",
+		ClientID:     "test_client_id",
+		ClientSecret: "test_client_secret",
+		RedirectURL:  "http://localhost:3000/callback",
 		Scopes:       []string{"email", "profile"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  url + "/auth",
 			TokenURL: url + "/token",
 		},
 	}
-}
-
-func newFakeOAuthServer() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
-		// Should return acccess token back to the user
-		w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
-		formBody := url.Values{
-			"access_token": []string{"fake_token"},
-			"scope":        []string{"user profile"},
-			"token_type":   []string{"bearer"},
-		}
-		w.Write([]byte(formBody.Encode()))
-	})
-
-	return mux
 }
