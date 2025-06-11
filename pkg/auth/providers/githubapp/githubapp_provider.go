@@ -35,6 +35,17 @@ const (
 	Name = "githubapp"
 )
 
+type githubClient interface {
+	getAccessToken(code string, config *v32.GithubAppConfig) (string, error)
+	getUser(githubAccessToken string, config *v32.GithubAppConfig) (Account, error)
+	getOrgs(githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error)
+	getTeams(githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error)
+	searchUsers(searchTerm, searchType string, githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error)
+	searchTeams(searchTerm, githubAccessToken string, config *v32.GithubAppConfig) ([]Account, error)
+	getUserOrgByID(id string, githubAccessToken string, config *v32.GithubAppConfig) (Account, error)
+	getTeamByID(id string, githubAccessToken string, config *v32.GithubAppConfig) (Account, error)
+}
+
 type tokensManager interface {
 	GetSecret(userID string, provider string, fallbackTokens []accessor.TokenAccessor) (string, error)
 	IsMemberOf(token accessor.TokenAccessor, group v3.Principal) bool
@@ -47,7 +58,7 @@ type ghAppProvider struct {
 	authConfigs  v3.AuthConfigInterface
 	secrets      wcorev1.SecretController
 	getConfig    func() (*v32.GithubAppConfig, error)
-	githubClient *GClient
+	githubClient githubClient
 	userMGR      user.Manager
 	tokenMGR     tokensManager
 }
