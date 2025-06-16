@@ -177,6 +177,7 @@ func (g *ghAppProvider) AuthenticateUser(ctx context.Context, input interface{})
 	if ok {
 		host = util2.GetHost(req)
 	}
+
 	return g.LoginUser(host, login, nil, false)
 }
 

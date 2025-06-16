@@ -2,6 +2,7 @@ package githubapp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -86,26 +87,13 @@ func (g *githubAppClient) getUser(githubAccessToken string, config *mgmtv3.Githu
 	return githubAcct, nil
 }
 
-func (g *githubAppClient) getOrgs(githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	var orgs []Account
-
-	url := g.getURL("ORG_INFO", config)
-	responses, err := g.paginateGithub(githubAccessToken, url)
+func (g *githubAppClient) getOrgs(config *mgmtv3.GithubAppConfig) ([]Account, error) {
+	data, err := teamDataFromApp(context.Background(), config.AppID, config.PrivateKey, config.InstallationID, config.Endpoint)
 	if err != nil {
-		logrus.Errorf("Github getGithubOrgs: GET url %v received error from github, err: %v", url, err)
-		return orgs, err
+		return nil, err
 	}
 
-	for _, b := range responses {
-		var orgObjs []Account
-		if err := json.Unmarshal(b, &orgObjs); err != nil {
-			logrus.Errorf("Github getGithubOrgs: received error unmarshalling org array, err: %v", err)
-			return nil, err
-		}
-		orgs = append(orgs, orgObjs...)
-	}
-
-	return orgs, nil
+	return data.ListOrgs(), nil
 }
 
 func (g *githubAppClient) getTeams(githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
@@ -130,9 +118,9 @@ func (g *githubAppClient) getTeams(githubAccessToken string, config *mgmtv3.Gith
 }
 
 // getOrgTeams returns the teams belonging to an organization.
-func (g *githubAppClient) getOrgTeams(githubAccessToken string, config *mgmtv3.GithubAppConfig, org Account) ([]Account, error) {
+func (g *githubAppClient) getOrgTeams(config *mgmtv3.GithubAppConfig, org Account) ([]Account, error) {
 	url := fmt.Sprintf(g.getURL("ORG_TEAMS", config), url.PathEscape(org.Login))
-	responses, err := g.paginateGithub(githubAccessToken, url)
+	responses, err := g.paginateGithub("NOT IN USE", url)
 	if err != nil {
 		logrus.Errorf("Github getGithubTeams: GET url %v received error from github, err: %v", url, err)
 		return nil, err
@@ -270,8 +258,8 @@ func (g *githubAppClient) searchUsers(searchTerm, searchType string, githubAcces
 
 // searchTeams searches for teams that match the search term in the organizations the access token has access to.
 // At the moment it only does a case-insensitive prefix match on the team's name.
-func (g *githubAppClient) searchTeams(searchTerm, githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	orgs, err := g.getOrgs(githubAccessToken, config)
+func (g *githubAppClient) searchTeams(searchTerm string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
+	orgs, err := g.getOrgs(config)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +268,7 @@ func (g *githubAppClient) searchTeams(searchTerm, githubAccessToken string, conf
 
 	var matches, teams []Account
 	for _, org := range orgs {
-		teams, err = g.getOrgTeams(githubAccessToken, config, org)
+		teams, err = g.getOrgTeams(config, org)
 		if err != nil {
 			return nil, err
 		}
