@@ -79,6 +79,18 @@ func (g *GitHubAppData) OrgsForUser(username string) []Account {
 	return accounts
 }
 
+// ListOrgs returns a set of Accounts derived from all Organizations queried by
+// with the GitHub App credentials.
+func (g *GitHubAppData) ListOrgs() []Account {
+	var accounts []Account
+
+	for _, org := range g.Orgs {
+		accounts = append(accounts, Account{Name: org.Name, Login: org.Login, AvatarURL: org.AvatarURL, ID: org.ID})
+	}
+
+	return accounts
+}
+
 // TeamsForUser returns a set of Accounts derived from the Teams the provided
 // username is a member of.
 func (g *GitHubAppData) TeamsForUser(username string) []Account {
