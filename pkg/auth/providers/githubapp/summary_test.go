@@ -33,6 +33,8 @@ func TestGitHubAppData(t *testing.T) {
 	data.AddMemberToTeamInOrg("other-org", "admin-team2", "test-user")
 	data.AddMemberToTeamInOrg("other-org", "admin-team2", "test-user2")
 
+	data.AddOrg(3456789, "example2", "Example Org 2", "https://example.com/avatar2.jpg")
+
 	t.Run("member data", func(t *testing.T) {
 		want := map[string][]string{
 			"example":   []string{"dev-team", "example"},
@@ -104,12 +106,21 @@ func TestGitHubAppData(t *testing.T) {
 					},
 				},
 			},
+			"example2": {
+				GitHubObject: GitHubObject{
+					Name:      "Example Org 2",
+					Login:     "example2",
+					AvatarURL: "https://example.com/avatar2.jpg",
+					ID:        3456789,
+				},
+				Teams: map[string]OrgTeam{},
+			},
 		}
-
 		assert.Equal(t, want, data.Orgs)
 	})
 
 	t.Run("orgs for user", func(t *testing.T) {
+		// Does not include the third Organisation
 		want := []Account{
 			{
 				Login:     "example",
@@ -138,6 +149,35 @@ func TestGitHubAppData(t *testing.T) {
 		}
 
 		assert.Equal(t, want, data.OrgsForUser("test-user2"))
+	})
+
+	t.Run("list all orgs", func(t *testing.T) {
+		want := []Account{
+			{
+				Login:     "example",
+				ID:        1234567,
+				Name:      "Example Org",
+				AvatarURL: "https://example.com/avatar1.jpg",
+			},
+			{
+				ID:        3456789,
+				Login:     "example2",
+				Name:      "Example Org 2",
+				AvatarURL: "https://example.com/avatar2.jpg",
+			},
+			{
+
+				ID:        2345678,
+				Login:     "other-org",
+				Name:      "Other Org",
+				AvatarURL: "https://examplecom/avatar2.jpg",
+			},
+		}
+		orgs := data.ListOrgs()
+		slices.SortFunc(orgs, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, orgs)
 	})
 
 	t.Run("teams for user", func(t *testing.T) {
