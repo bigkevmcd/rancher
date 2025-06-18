@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
@@ -88,7 +89,21 @@ func (g *githubAppClient) getUser(githubAccessToken string, config *mgmtv3.Githu
 }
 
 func (g *githubAppClient) getOrgs(config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	data, err := teamDataFromApp(context.Background(), config.AppID, config.PrivateKey, config.InstallationID, config.Endpoint)
+	appID, err := strconv.ParseInt(config.AppID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parsing AppID: %w", err)
+	}
+
+	var installationID int64
+	if config.InstallationID != "" {
+		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing InstallationID: %w", err)
+		}
+		installationID = parsed
+	}
+
+	data, err := teamDataFromApp(context.Background(), appID, []byte(config.PrivateKey), installationID, g.getURL("", config))
 	if err != nil {
 		return nil, err
 	}
