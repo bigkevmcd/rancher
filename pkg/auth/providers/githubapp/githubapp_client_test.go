@@ -65,6 +65,31 @@ func TestGithubAppClientGetUser(t *testing.T) {
 }
 
 func TestGithubAppClientGetOrgs(t *testing.T) {
+	privateKey := newTestCertificate(t)
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
+		withPrivateKey("23456", privateKey),
+	))
+	defer srv.Close()
+	cfg := &mgmtv3.GithubAppConfig{
+		Hostname:     stripScheme(t, srv),
+		ClientID:     "test_client_id",
+		ClientSecret: "test_client_secret",
+		AppID:        "23456",
+		PrivateKey:   string(privateKey),
+	}
+
+	appClient := githubAppClient{httpClient: http.DefaultClient}
+	orgs, err := appClient.getOrgs(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Account{}
+
+	assert.Equal(t, want, orgs)
+}
+
+func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
 	srv := httptest.NewServer(newFakeGitHubServer(t,
 		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing")))
 	defer srv.Close()
@@ -72,6 +97,7 @@ func TestGithubAppClientGetOrgs(t *testing.T) {
 		Hostname:     stripScheme(t, srv),
 		ClientID:     "test_client_id",
 		ClientSecret: "test_client_secret",
+		AppID:        "1234567",
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
