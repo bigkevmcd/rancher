@@ -385,16 +385,10 @@ func TestTeamDataFromApp(t *testing.T) {
 	})
 }
 
+// this starts a very simple HTTP server to respond to GitHub client requests.
+// No attempt is done to authenticate the request.
 func startFakeGitHubServer(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
-	testInt64 := func(t *testing.T, s string) int64 {
-		v, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return v
-	}
-
 	// https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-an-installation-for-the-authenticated-app
 	mux.HandleFunc("GET /api/v3/app/installations/1", func(w http.ResponseWriter, r *http.Request) {
 		marshalJSON(t, w, map[string]any{
@@ -497,4 +491,12 @@ func newTestCertificate(t *testing.T) []byte {
 	}
 
 	return certPrivKeyPEM.Bytes()
+}
+
+func testInt64(t *testing.T, s string) int64 {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
