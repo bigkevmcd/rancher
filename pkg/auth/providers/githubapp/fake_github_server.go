@@ -1,18 +1,17 @@
 package githubapp
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
-	"github.com/google/uuid" // For generating unique IDs for codes/tokens
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 const (
-	oauthPort           = ":8080"
 	authCodeLifetime    = 5 * time.Minute
 	accessTokenLifetime = 1 * time.Hour
 )
@@ -35,6 +34,12 @@ type fakeAccessToken struct {
 	Expiry   time.Time
 }
 
+type fakeInstallationToken struct {
+	InstallationID int64
+	Token          string
+	Expiry         time.Time
+}
+
 type fakeGitHubServer struct {
 	*http.ServeMux
 	t *testing.T
@@ -44,6 +49,12 @@ type fakeGitHubServer struct {
 	authCodes map[string]fakeAuthCode
 	// Stored access tokens: token -> {clientID, userID, expiry}
 	accessTokens map[string]fakeAccessToken
+
+	// Mapping from AppID to PrivateKey in PEM format
+	privateKeys map[string][]byte
+
+	// App Installation tokens
+	installationTokens map[string]fakeInstallationToken
 }
 
 func withTestCode(clientID, code, redirectURI, userID string) func(*fakeGitHubServer) {
@@ -54,6 +65,12 @@ func withTestCode(clientID, code, redirectURI, userID string) func(*fakeGitHubSe
 			UserID:      userID,
 			Expiry:      time.Now().Add(authCodeLifetime),
 		}
+	}
+}
+
+func withPrivateKey(clientID string, pemData []byte) func(*fakeGitHubServer) {
+	return func(s *fakeGitHubServer) {
+		s.privateKeys[clientID] = pemData
 	}
 }
 
@@ -81,32 +98,35 @@ func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGit
 					"http://127.0.0.1:3000/callback"},
 			},
 		},
-		authCodes:    map[string]fakeAuthCode{},
-		accessTokens: map[string]fakeAccessToken{},
-		t:            t,
+		privateKeys:        map[string][]byte{},
+		authCodes:          map[string]fakeAuthCode{},
+		accessTokens:       map[string]fakeAccessToken{},
+		installationTokens: map[string]fakeInstallationToken{},
+		t:                  t,
 	}
 	for _, opt := range opts {
 		opt(srv)
 	}
 
-	srv.HandleFunc("/authorize", srv.authorizeHandler)
-	srv.HandleFunc("/login/oauth/access_token", srv.tokenHandler)
-	srv.HandleFunc("/userinfo", srv.userinfoHandler)
-	srv.HandleFunc("/api/v3/user", srv.userHandler)
-
+	srv.HandleFunc("POST /authorize", srv.authorizeHandler)
+	srv.HandleFunc("POST /login/oauth/access_token", srv.tokenHandler)
+	srv.HandleFunc("GET /userinfo", srv.userinfoHandler)
+	srv.HandleFunc("GET /api/v3/user", srv.userHandler)
+	srv.HandleFunc("GET /api/v3/app/installations", srv.installationsHandler)
+	srv.HandleFunc("POST /api/v3/app/installations/{installationID}/access_tokens", srv.installationTokenHandler)
+	srv.HandleFunc("GET /api/v3/organizations/{organizationID}", srv.organizationHandler)
 	return srv
 }
 
 // authorizeHandler simulates the user consent and redirects back to the client.
 // Expected query parameters: response_type, client_id, redirect_uri, scope, state
 func (s *fakeGitHubServer) authorizeHandler(w http.ResponseWriter, r *http.Request) {
-	s.t.Logf("Received /authorize request from %s", r.RemoteAddr)
+	s.t.Logf("Received request for %s", r.URL)
 	query := r.URL.Query()
 
 	responseType := query.Get("response_type")
 	clientID := query.Get("client_id")
 	redirectURI := query.Get("redirect_uri")
-	// scope := query.Get("scope")
 	state := query.Get("state")
 
 	if responseType != "code" {
@@ -159,7 +179,7 @@ func (s *fakeGitHubServer) authorizeHandler(w http.ResponseWriter, r *http.Reque
 // Expected form parameters: client_id, client_secret, code, redirect_uri
 // https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#2-users-are-redirected-back-to-your-site-by-github
 func (s *fakeGitHubServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
-	s.t.Logf("Received /token request from %s", r.RemoteAddr)
+	s.t.Logf("Received request for %s", r.URL)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -202,8 +222,7 @@ func (s *fakeGitHubServer) tokenHandler(w http.ResponseWriter, r *http.Request) 
 	s.t.Logf("Generated access token: %s for client %s, user %s", accessToken, clientID, authCodeData.UserID)
 
 	// Respond with the access token
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	marshalJSON(s.t, w, map[string]any{
 		"access_token": accessToken,
 		"token_type":   "Bearer",
 		"expires_in":   int(accessTokenLifetime.Seconds()),
@@ -214,7 +233,7 @@ func (s *fakeGitHubServer) tokenHandler(w http.ResponseWriter, r *http.Request) 
 // userinfoHandler simulates a protected resource endpoint.
 // Requires an Authorization: Bearer <access_token> header.
 func (s *fakeGitHubServer) userinfoHandler(w http.ResponseWriter, r *http.Request) {
-	s.t.Logf("Received /userinfo request from %s", r.RemoteAddr)
+	s.t.Logf("Received request for %s", r.URL)
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
@@ -239,9 +258,7 @@ func (s *fakeGitHubServer) userinfoHandler(w http.ResponseWriter, r *http.Reques
 
 	s.t.Logf("Access token %s is valid for user %s", accessToken, tokenData.UserID)
 
-	// Respond with fake user info
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	marshalJSON(s.t, w, map[string]any{
 		"sub":      tokenData.UserID, // Subject (user ID)
 		"name":     "Fake User",
 		"email":    fmt.Sprintf("%s@example.com", tokenData.UserID),
@@ -255,7 +272,7 @@ func (s *fakeGitHubServer) userinfoHandler(w http.ResponseWriter, r *http.Reques
 // This should probably be updated to use the Bearer token convention https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#3-use-the-access-token-to-access-the-api
 // https://docs.github.com/en/enterprise-server@3.13/rest/users/users?apiVersion=2022-11-28#get-the-authenticated-user
 func (s *fakeGitHubServer) userHandler(w http.ResponseWriter, r *http.Request) {
-	s.t.Logf("Received /api/v3/user request from %s", r.RemoteAddr)
+	s.t.Logf("Received request for %s", r.URL)
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
@@ -278,8 +295,7 @@ func (s *fakeGitHubServer) userHandler(w http.ResponseWriter, r *http.Request) {
 
 	s.t.Logf("Access token %s is valid for user %s", accessToken, tokenData.UserID)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	marshalJSON(s.t, w, map[string]any{
 		"login":                     "octocat",
 		"id":                        1,
 		"node_id":                   "MDQ6VXNlcjE=",
@@ -338,4 +354,165 @@ func (s *fakeGitHubServer) isValidRedirectURI(clientID, redirectURI string) bool
 		}
 	}
 	return false
+}
+
+func (s *fakeGitHubServer) installationsHandler(w http.ResponseWriter, r *http.Request) {
+	s.t.Logf("Received request for %s", r.URL)
+	// TODO: Move this around
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	const bearerPrefix = "Bearer "
+	if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		http.Error(w, `{"error": "invalid_token", "message": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+		return
+	}
+
+	accessToken := authHeader[len(bearerPrefix):]
+	_, err := jwt.Parse(accessToken, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		appID, err := token.Claims.GetIssuer()
+		if err != nil {
+			return nil, fmt.Errorf("invalid appID in issuer: %w", err)
+		}
+		key := s.privateKeys[appID]
+		parsed, err := jwt.ParseRSAPrivateKeyFromPEM(key)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing key: %w", err)
+		}
+
+		return parsed.Public(), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}))
+	if err != nil {
+		s.t.Logf("Invalid or expired access token: %s: %s", accessToken, err)
+		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	marshalJSON(s.t, w, []any{
+		map[string]any{
+			"id":          1,
+			"target_type": "Organization",
+			"target_id":   1,
+		},
+		map[string]any{
+			"id":          2,
+			"target_type": "Organization",
+			"target_id":   2,
+		},
+	})
+}
+
+// Creates an installation token for use by an app.
+// Authorization: Bearer <signed_JWT>
+// Requires a signed JWT for the correct App.
+// https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
+func (s *fakeGitHubServer) installationTokenHandler(w http.ResponseWriter, r *http.Request) {
+	s.t.Logf("Received request for %s", r.URL)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	const bearerPrefix = "Bearer "
+	if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		http.Error(w, `{"error": "invalid_token", "message": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+		return
+	}
+
+	accessToken := authHeader[len(bearerPrefix):]
+	_, err := jwt.Parse(accessToken, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		appID, err := token.Claims.GetIssuer()
+		if err != nil {
+			return nil, fmt.Errorf("invalid appID in issuer: %w", err)
+		}
+		key := s.privateKeys[appID]
+		parsed, err := jwt.ParseRSAPrivateKeyFromPEM(key)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing key: %w", err)
+		}
+
+		return parsed.Public(), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}))
+	if err != nil {
+		s.t.Logf("Invalid or expired access token: %s: %s", accessToken, err)
+		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	installationID := testInt64(s.t, r.PathValue("installationID"))
+	authCode := uuid.New().String()
+	expiry := time.Now().Add(authCodeLifetime)
+	s.installationTokens[authCode] = fakeInstallationToken{
+		InstallationID: installationID,
+		Expiry:         expiry,
+	}
+	s.t.Logf("Generated code: %s for installation %v", authCode, installationID)
+
+	marshalJSON(s.t, w, map[string]any{
+		"token":      authCode,
+		"expires_at": expiry,
+		"permissions": map[string]any{
+			"issues":   "write",
+			"contents": "read",
+		},
+		"repository_selection": "selected",
+		"repositories": []map[string]any{
+			{
+				"id":        1296269,
+				"node_id":   "MDEwOlJlcG9zaXRvcnkxMjk2MjY5",
+				"name":      "Hello-World",
+				"full_name": "octocat/Hello-World",
+				"owner": map[string]any{
+					"login": "octocat",
+					"id":    1,
+				},
+			},
+		},
+	})
+}
+
+// organizationHandler fakes the Organization info API
+// Requires an Authorization: Bearer <installation_token>.
+//
+// https://docs.github.com/en/rest/orgs/orgs?apiVersion=2022-11-28#get-an-organization
+func (s *fakeGitHubServer) organizationHandler(w http.ResponseWriter, r *http.Request) {
+	s.t.Logf("Received request for %s", r.URL)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	const bearerPrefix = "Bearer "
+	if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		http.Error(w, `{"error": "invalid_token", "message": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+		return
+	}
+	accessToken := authHeader[len(bearerPrefix):]
+
+	tokenData, ok := s.installationTokens[accessToken]
+	if !ok || tokenData.Expiry.Before(time.Now()) {
+		s.t.Logf("Invalid or expired access token: %s", accessToken)
+		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	organizationID := testInt64(s.t, r.PathValue("organizationID"))
+	marshalJSON(s.t, w, map[string]any{
+		"login":      "example-org-" + r.PathValue("organizationID"),
+		"id":         organizationID,
+		"type":       "Organization",
+		"avatar_url": "https://example.com/avatar.jpg",
+		"name":       "Example Org " + r.PathValue("organizationID"),
+	})
 }
