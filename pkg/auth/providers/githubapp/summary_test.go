@@ -240,6 +240,45 @@ func TestGitHubAppData(t *testing.T) {
 		})
 		assert.Equal(t, want, accounts)
 	})
+
+	t.Run("list all teams", func(t *testing.T) {
+		want := []Account{
+			{ID: 45678,
+				Login:     "admin-team",
+				Name:      "admin-team",
+				AvatarURL: "https://example.com/avatar1.jpg",
+				HTMLURL:   "https://example.com/org/example/team/admin-team",
+			},
+			{
+				ID:        34579,
+				Login:     "admin-team2",
+				Name:      "admin-team2",
+				AvatarURL: "https://examplecom/avatar2.jpg",
+				HTMLURL:   "https://example.com/org/other-org/team-dev-team2",
+			},
+			{
+				ID:        34567,
+				Login:     "dev-team",
+				Name:      "dev-team",
+				AvatarURL: "https://example.com/avatar1.jpg",
+				HTMLURL:   "https://example.com/org/example/team/dev-team",
+			},
+			{
+				ID:        23468,
+				Login:     "dev-team2",
+				Name:      "dev-team2",
+				AvatarURL: "https://examplecom/avatar2.jpg",
+				HTMLURL:   "https://example.com/org/other-org/team/dev-team2",
+			},
+		}
+
+		teams := data.ListTeams()
+		slices.SortFunc(teams, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, teams)
+	})
+
 }
 
 func TestGitHubAppData_Errors(t *testing.T) {

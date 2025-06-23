@@ -40,6 +40,24 @@ type fakeInstallationToken struct {
 	Expiry         time.Time
 }
 
+type fakeTeam struct {
+	ID      int    `json:"id"`
+	URL     string `json:"url"`
+	HTMLURL string `json:"html_url"`
+	Name    string `json:"name"`
+	Slug    string `json:"slug"`
+}
+
+type fakeOrganization struct {
+	Login     string `json:"login"`
+	ID        int    `json:"id"`
+	Type      string `json:"type"`
+	AvatarURL string `json:"avatar_url"`
+	Name      string `json:"name"`
+
+	teams map[string]fakeTeam
+}
+
 type fakeGitHubServer struct {
 	*http.ServeMux
 	t *testing.T
@@ -55,6 +73,8 @@ type fakeGitHubServer struct {
 
 	// App Installation tokens
 	installationTokens map[string]fakeInstallationToken
+
+	organizations map[string]fakeOrganization
 }
 
 func withTestCode(clientID, code, redirectURI, userID string) func(*fakeGitHubServer) {
@@ -92,6 +112,40 @@ func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGit
 		accessTokens:       map[string]fakeAccessToken{},
 		installationTokens: map[string]fakeInstallationToken{},
 		t:                  t,
+		organizations: map[string]fakeOrganization{
+			"1": {
+				Login:     "example-org-1",
+				ID:        1,
+				Type:      "Organization",
+				AvatarURL: "https://example.com/avatar.jpg",
+				Name:      "Example Org 1",
+				teams: map[string]fakeTeam{
+					"1215": {
+						ID:      1215,
+						URL:     "https://api.github.com/teams/1215",
+						HTMLURL: "https://github.com/orgs/example-org-1/dev-team",
+						Name:    "Dev Team",
+						Slug:    "dev-team",
+					},
+				},
+			},
+			"2": {
+				Login:     "example-org-2",
+				ID:        2,
+				Type:      "Organization",
+				AvatarURL: "https://example.com/avatar.jpg",
+				Name:      "Example Org 2",
+				teams: map[string]fakeTeam{
+					"1216": {
+						ID:      1216,
+						URL:     "https://api.github.com/teams/1216",
+						HTMLURL: "https://github.com/orgs/example-org-2/dev-team",
+						Name:    "Dev Team",
+						Slug:    "dev-team",
+					},
+				},
+			},
+		},
 	}
 	for _, opt := range opts {
 		opt(srv)
@@ -105,7 +159,7 @@ func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGit
 	srv.HandleFunc("GET /api/v3/app/installations/{installationID}", srv.installationHandler)
 	srv.HandleFunc("POST /api/v3/app/installations/{installationID}/access_tokens", srv.installationTokenHandler)
 	srv.HandleFunc("GET /api/v3/organizations/{organizationID}", srv.organizationHandler)
-	srv.HandleFunc("GET /api/v3/orgs/{organizationName}/teams", srv.organizationTeamsHandler)
+	srv.HandleFunc("GET /api/v3/orgs/{organizationSlug}/teams", srv.organizationTeamsHandler)
 	srv.HandleFunc("GET /api/v3/organizations/{organizationID}/team/{teamID}/members", srv.organizationTeamMembersHandler)
 	return srv
 }
@@ -592,14 +646,13 @@ func (s *fakeGitHubServer) organizationHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	organizationID := testInt64(s.t, r.PathValue("organizationID"))
-	marshalJSON(s.t, w, map[string]any{
-		"login":      "example-org-" + r.PathValue("organizationID"),
-		"id":         organizationID,
-		"type":       "Organization",
-		"avatar_url": "https://example.com/avatar.jpg",
-		"name":       "Example Org " + r.PathValue("organizationID"),
-	})
+	organizationID := r.PathValue("organizationID")
+	org, ok := s.organizations[organizationID]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	marshalJSON(s.t, w, org)
 }
 
 // organizationTeamsHandler fakes the Organization teams API
@@ -628,24 +681,29 @@ func (s *fakeGitHubServer) organizationTeamsHandler(w http.ResponseWriter, r *ht
 		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
 		return
 	}
-	organizationName := r.PathValue("organizationName")
-	marshalJSON(s.t, w, []map[string]any{
-		{
-			"id":                   1,
-			"node_id":              "MDQ6VGVhbTE=",
-			"url":                  "https://api.github.com/teams/1",
-			"html_url":             "https://github.com/orgs/" + organizationName + "teams/justice-league",
-			"name":                 "Justice League",
-			"slug":                 "justice-league",
-			"description":          "A great team.",
-			"privacy":              "closed",
-			"notification_setting": "notifications_enabled",
-			"permission":           "admin",
-			"members_url":          "https://api.github.com/teams/1/members{/member}",
-			"repositories_url":     "https://api.github.com/teams/1/repos",
-			"parent":               nil,
-		},
-	})
+	organizationSlug := r.PathValue("organizationSlug")
+	org, ok := s.findFakeOrgBySlug(organizationSlug)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	var teams []fakeTeam
+	for _, team := range org.teams {
+		teams = append(teams, team)
+	}
+
+	marshalJSON(s.t, w, teams)
+}
+
+func (s *fakeGitHubServer) findFakeOrgBySlug(slug string) (fakeOrganization, bool) {
+	for _, org := range s.organizations {
+		if org.Login == slug {
+			return org, true
+		}
+	}
+
+	return fakeOrganization{}, false
 }
 
 // organizationTeamMembersHandler fakes the Organization teams API
@@ -699,4 +757,12 @@ func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter,
 			"site_admin":          false,
 		},
 	})
+}
+
+func sumString(s string) int64 {
+	var sum int64 = 0
+	for _, char := range s {
+		sum += int64(char)
+	}
+	return sum
 }
