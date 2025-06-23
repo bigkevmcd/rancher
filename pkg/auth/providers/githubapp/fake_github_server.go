@@ -74,17 +74,6 @@ func withPrivateKey(clientID string, pemData []byte) func(*fakeGitHubServer) {
 	}
 }
 
-// func verifyAPIVersion(t *testing.T, next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		if apiVersion := r.Header.Get("X-GitHub-Api-Version"); apiVersion != "2022-11-28" {
-// 			t.Errorf("invalid X-GitHub-Api-Version: %s", apiVersion)
-// 			return
-// 		}
-
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
-
 func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGitHubServer {
 	mux := http.NewServeMux()
 
@@ -113,8 +102,11 @@ func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGit
 	srv.HandleFunc("GET /userinfo", srv.userinfoHandler)
 	srv.HandleFunc("GET /api/v3/user", srv.userHandler)
 	srv.HandleFunc("GET /api/v3/app/installations", srv.installationsHandler)
+	srv.HandleFunc("GET /api/v3/app/installations/{installationID}", srv.installationHandler)
 	srv.HandleFunc("POST /api/v3/app/installations/{installationID}/access_tokens", srv.installationTokenHandler)
 	srv.HandleFunc("GET /api/v3/organizations/{organizationID}", srv.organizationHandler)
+	srv.HandleFunc("GET /api/v3/orgs/{organizationName}/teams", srv.organizationTeamsHandler)
+	srv.HandleFunc("GET /api/v3/organizations/{organizationID}/team/{teamID}/members", srv.organizationTeamMembersHandler)
 	return srv
 }
 
@@ -356,6 +348,99 @@ func (s *fakeGitHubServer) isValidRedirectURI(clientID, redirectURI string) bool
 	return false
 }
 
+// Requires Auth token with installation credentials
+//
+// GitHub API docs: https://docs.github.com/rest/apps/apps#get-an-installation-for-the-authenticated-app
+func (s *fakeGitHubServer) installationHandler(w http.ResponseWriter, r *http.Request) {
+	s.t.Logf("Received request for %s", r.URL)
+	// TODO: Move this around
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	const bearerPrefix = "Bearer "
+	if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		http.Error(w, `{"error": "invalid_token", "message": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+		return
+	}
+
+	accessToken := authHeader[len(bearerPrefix):]
+	_, err := jwt.Parse(accessToken, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		appID, err := token.Claims.GetIssuer()
+		if err != nil {
+			return nil, fmt.Errorf("invalid appID in issuer: %w", err)
+		}
+		key := s.privateKeys[appID]
+		parsed, err := jwt.ParseRSAPrivateKeyFromPEM(key)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing key: %w", err)
+		}
+
+		return parsed.Public(), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}))
+	if err != nil {
+		s.t.Logf("Invalid or expired access token: %s: %s", accessToken, err)
+		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	marshalJSON(s.t, w, map[string]any{
+		"id": 1,
+		"account": map[string]any{
+			"login":               "octocat",
+			"id":                  1,
+			"node_id":             "MDQ6VXNlcjE=",
+			"avatar_url":          "https://github.com/images/error/octocat_happy.gif",
+			"gravatar_id":         "",
+			"url":                 "https://api.github.com/users/octocat",
+			"html_url":            "https://github.com/octocat",
+			"followers_url":       "https://api.github.com/users/octocat/followers",
+			"following_url":       "https://api.github.com/users/octocat/following{/other_user}",
+			"gists_url":           "https://api.github.com/users/octocat/gists{/gist_id}",
+			"starred_url":         "https://api.github.com/users/octocat/starred{/owner}{/repo}",
+			"subscriptions_url":   "https://api.github.com/users/octocat/subscriptions",
+			"organizations_url":   "https://api.github.com/users/octocat/orgs",
+			"repos_url":           "https://api.github.com/users/octocat/repos",
+			"events_url":          "https://api.github.com/users/octocat/events{/privacy}",
+			"received_events_url": "https://api.github.com/users/octocat/received_events",
+			"type":                "User",
+			"site_admin":          false,
+		},
+		"access_tokens_url": "https://api.github.com/app/installations/1/access_tokens",
+		"repositories_url":  "https://api.github.com/installation/repositories",
+		"html_url":          "https://github.com/organizations/github/settings/installations/1",
+		"app_id":            1,
+		"target_id":         1,
+		"target_type":       "Organization",
+		"permissions": map[string]any{
+			"checks":   "write",
+			"metadata": "read",
+			"contents": "read",
+		},
+		"events": []string{
+			"push",
+			"pull_request",
+		},
+		"single_file_name":          "config.yaml",
+		"has_multiple_single_files": true,
+		"single_file_paths": []string{
+			"config.yml",
+			".github/issue_TEMPLATE.md",
+		},
+		"repository_selection": "selected",
+		"created_at":           "2017-07-08T16:18:44-04:00",
+		"updated_at":           "2017-07-08T16:18:44-04:00",
+		"app_slug":             "github-actions",
+		"suspended_at":         nil,
+		"suspended_by":         nil,
+	})
+}
+
 func (s *fakeGitHubServer) installationsHandler(w http.ResponseWriter, r *http.Request) {
 	s.t.Logf("Received request for %s", r.URL)
 	// TODO: Move this around
@@ -514,5 +599,104 @@ func (s *fakeGitHubServer) organizationHandler(w http.ResponseWriter, r *http.Re
 		"type":       "Organization",
 		"avatar_url": "https://example.com/avatar.jpg",
 		"name":       "Example Org " + r.PathValue("organizationID"),
+	})
+}
+
+// organizationTeamsHandler fakes the Organization teams API
+// Requires an Authorization: Bearer <installation_token>.
+//
+// https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#list-teams
+func (s *fakeGitHubServer) organizationTeamsHandler(w http.ResponseWriter, r *http.Request) {
+	s.t.Logf("Received request for %s", r.URL)
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	const bearerPrefix = "Bearer "
+	if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		http.Error(w, `{"error": "invalid_token", "message": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+		return
+	}
+	accessToken := authHeader[len(bearerPrefix):]
+
+	tokenData, ok := s.installationTokens[accessToken]
+	if !ok || tokenData.Expiry.Before(time.Now()) {
+		s.t.Logf("Invalid or expired access token: %s", accessToken)
+		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
+		return
+	}
+	organizationName := r.PathValue("organizationName")
+	marshalJSON(s.t, w, []map[string]any{
+		{
+			"id":                   1,
+			"node_id":              "MDQ6VGVhbTE=",
+			"url":                  "https://api.github.com/teams/1",
+			"html_url":             "https://github.com/orgs/" + organizationName + "teams/justice-league",
+			"name":                 "Justice League",
+			"slug":                 "justice-league",
+			"description":          "A great team.",
+			"privacy":              "closed",
+			"notification_setting": "notifications_enabled",
+			"permission":           "admin",
+			"members_url":          "https://api.github.com/teams/1/members{/member}",
+			"repositories_url":     "https://api.github.com/teams/1/repos",
+			"parent":               nil,
+		},
+	})
+}
+
+// organizationTeamMembersHandler fakes the Organization teams API
+// Requires an Authorization: Bearer <installation_token>.
+//
+// https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#list-team-members
+func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter, r *http.Request) {
+	s.t.Logf("Received request for %s", r.URL)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, `{"error": "unauthorized", "message": "Missing Authorization header"}`, http.StatusUnauthorized)
+		return
+	}
+
+	const bearerPrefix = "Bearer "
+	if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		http.Error(w, `{"error": "invalid_token", "message": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+		return
+	}
+	accessToken := authHeader[len(bearerPrefix):]
+
+	tokenData, ok := s.installationTokens[accessToken]
+	if !ok || tokenData.Expiry.Before(time.Now()) {
+		s.t.Logf("Invalid or expired access token: %s", accessToken)
+		http.Error(w, `{"error": "invalid_token", "message": "Access token is invalid or expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// organizationID := r.PathValue("organizationID")
+	// teamID := r.PathValue("teamID")
+
+	marshalJSON(s.t, w, []map[string]any{
+		{
+			"login":               "octocat",
+			"id":                  1,
+			"node_id":             "MDQ6VXNlcjE=",
+			"avatar_url":          "https://github.com/images/error/octocat_happy.gif",
+			"gravatar_id":         "",
+			"url":                 "https://api.github.com/users/octocat",
+			"html_url":            "https://github.com/octocat",
+			"followers_url":       "https://api.github.com/users/octocat/followers",
+			"following_url":       "https://api.github.com/users/octocat/following{/other_user}",
+			"gists_url":           "https://api.github.com/users/octocat/gists{/gist_id}",
+			"starred_url":         "https://api.github.com/users/octocat/starred{/owner}{/repo}",
+			"subscriptions_url":   "https://api.github.com/users/octocat/subscriptions",
+			"organizations_url":   "https://api.github.com/users/octocat/orgs",
+			"repos_url":           "https://api.github.com/users/octocat/repos",
+			"events_url":          "https://api.github.com/users/octocat/events{/privacy}",
+			"received_events_url": "https://api.github.com/users/octocat/received_events",
+			"type":                "User",
+			"site_admin":          false,
+		},
 	})
 }
