@@ -111,25 +111,27 @@ func (g *githubAppClient) getOrgs(config *mgmtv3.GithubAppConfig) ([]Account, er
 	return data.ListOrgs(), nil
 }
 
-func (g *githubAppClient) getTeams(githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	var teams []Account
-
-	url := g.getURL("TEAMS", config)
-	responses, err := g.paginateGithub(githubAccessToken, url)
+func (g *githubAppClient) getTeams(config *mgmtv3.GithubAppConfig) ([]Account, error) {
+	appID, err := strconv.ParseInt(config.AppID, 10, 64)
 	if err != nil {
-		logrus.Errorf("Github getGithubTeams: GET url %v received error from github, err: %v", url, err)
-		return teams, err
+		return nil, fmt.Errorf("parsing AppID: %w", err)
 	}
-	for _, response := range responses {
-		teamObjs, err := g.getTeamInfo(response, config)
-		if err != nil {
-			logrus.Errorf("Github getGithubTeams: received error unmarshalling teams array, err: %v", err)
-			return teams, err
-		}
-		teams = append(teams, teamObjs...)
 
+	var installationID int64
+	if config.InstallationID != "" {
+		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing InstallationID: %w", err)
+		}
+		installationID = parsed
 	}
-	return teams, nil
+
+	data, err := teamDataFromApp(context.Background(), appID, []byte(config.PrivateKey), installationID, g.getURL("", config))
+	if err != nil {
+		return nil, err
+	}
+
+	return data.ListTeams(), nil
 }
 
 // getOrgTeams returns the teams belonging to an organization.
@@ -177,98 +179,30 @@ func (g *githubAppClient) getOrgTeamInfo(b []byte, config *mgmtv3.GithubAppConfi
 	return teams, nil
 }
 
-func (g *githubAppClient) getTeamInfo(b []byte, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	var teams []Account
-	var teamObjs []Team
-	if err := json.Unmarshal(b, &teamObjs); err != nil {
-		logrus.Errorf("Github getTeamInfo: received error unmarshalling team array, err: %v", err)
-		return teams, err
-	}
-
-	url := g.getURL("TEAM_PROFILE", config)
-	for _, team := range teamObjs {
-		teamAcct := Account{}
-		team.toGithubAccount(url, &teamAcct)
-		teams = append(teams, teamAcct)
-	}
-
-	return teams, nil
-}
-
-func (g *githubAppClient) getTeamByID(id string, githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
-	var teamAcct Account
-
-	url := g.getURL("TEAM", config) + id
-	b, _, err := g.getFromGithub(githubAccessToken, url)
-	if err != nil {
-		logrus.Errorf("Github getTeamByID: GET url %v received error from github, err: %v", url, err)
-		return teamAcct, err
-	}
-	var teamObj Team
-	if err := json.Unmarshal(b, &teamObj); err != nil {
-		logrus.Errorf("Github getTeamByID: received error unmarshalling team array, err: %v", err)
-		return teamAcct, err
-	}
-	url = g.getURL("TEAM_PROFILE", config)
-	teamObj.toGithubAccount(url, &teamAcct)
-
-	return teamAcct, nil
-}
-
-func (g *githubAppClient) paginateGithub(githubAccessToken string, url string) ([][]byte, error) {
-	var responses [][]byte
-	var err error
-	var response []byte
-	nextURL := url
-	for nextURL != "" {
-		response, nextURL, err = g.getFromGithub(githubAccessToken, nextURL)
-		if err != nil {
-			return nil, err
-		}
-		responses = append(responses, response)
-	}
-
-	return responses, nil
-}
-
-func (g *githubAppClient) nextGithubPage(response *http.Response) string {
-	header := response.Header.Get("link")
-
-	if header != "" {
-		links := linkheader.Parse(header)
-		for _, link := range links {
-			if link.Rel == "next" {
-				return link.URL
-			}
-		}
-	}
-
-	return ""
-}
-
-func (g *githubAppClient) searchUsers(searchTerm, searchType string, githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
+func (g *githubAppClient) searchUsers(searchTerm, searchType string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	if searchType == "group" {
 		searchType = orgType
 	}
-	search := searchTerm
-	if searchType != "" {
-		search += "+type:" + searchType
-	}
-	search = URLEncoded(search)
-	url := g.getURL("USER_SEARCH", config) + search
+	// search := searchTerm
+	// if searchType != "" {
+	// 	search += "+type:" + searchType
+	// }
+	// search = URLEncoded(search)
+	// url := g.getURL("USER_SEARCH", config) + search
 
-	b, _, err := g.getFromGithub(githubAccessToken, url)
-	if err != nil {
-		// no match on search returns an error. do not log
-		return nil, nil
-	}
+	// b, _, err := g.getFromGithub(githubAccessToken, url)
+	// if err != nil {
+	// 	// no match on search returns an error. do not log
+	// 	return nil, nil
+	// }
 
-	result := &searchResult{}
-	if err := json.Unmarshal(b, result); err != nil {
-		return nil, err
-	}
+	// result := &searchResult{}
+	// if err := json.Unmarshal(b, result); err != nil {
+	// 	return nil, err
+	// }
+	var result []Account
 
-	return result.Items, nil
+	return result, nil
 }
 
 // searchTeams searches for teams that match the search term in the organizations the access token has access to.
@@ -426,4 +360,73 @@ func (g *githubAppClient) getURL(endpoint string, config *mgmtv3.GithubAppConfig
 	}
 
 	return toReturn
+}
+
+// func (g *githubAppClient) getTeamInfo(b []byte, config *mgmtv3.GithubAppConfig) ([]Account, error) {
+// 	var teams []Account
+// 	var teamObjs []Team
+// 	if err := json.Unmarshal(b, &teamObjs); err != nil {
+// 		logrus.Errorf("Github getTeamInfo: received error unmarshalling team array, err: %v", err)
+// 		return teams, err
+// 	}
+
+// 	url := g.getURL("TEAM_PROFILE", config)
+// 	for _, team := range teamObjs {
+// 		teamAcct := Account{}
+// 		team.toGithubAccount(url, &teamAcct)
+// 		teams = append(teams, teamAcct)
+// 	}
+
+// 	return teams, nil
+// }
+
+// func (g *githubAppClient) getTeamByID(id string, githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
+// 	var teamAcct Account
+
+// 	url := g.getURL("TEAM", config) + id
+// 	b, _, err := g.getFromGithub(githubAccessToken, url)
+// 	if err != nil {
+// 		logrus.Errorf("Github getTeamByID: GET url %v received error from github, err: %v", url, err)
+// 		return teamAcct, err
+// 	}
+// 	var teamObj Team
+// 	if err := json.Unmarshal(b, &teamObj); err != nil {
+// 		logrus.Errorf("Github getTeamByID: received error unmarshalling team array, err: %v", err)
+// 		return teamAcct, err
+// 	}
+// 	url = g.getURL("TEAM_PROFILE", config)
+// 	teamObj.toGithubAccount(url, &teamAcct)
+
+// 	return teamAcct, nil
+// }
+
+func (g *githubAppClient) paginateGithub(githubAccessToken string, url string) ([][]byte, error) {
+	var responses [][]byte
+	var err error
+	var response []byte
+	nextURL := url
+	for nextURL != "" {
+		response, nextURL, err = g.getFromGithub(githubAccessToken, nextURL)
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, response)
+	}
+
+	return responses, nil
+}
+
+func (g *githubAppClient) nextGithubPage(response *http.Response) string {
+	header := response.Header.Get("link")
+
+	if header != "" {
+		links := linkheader.Parse(header)
+		for _, link := range links {
+			if link.Rel == "next" {
+				return link.URL
+			}
+		}
+	}
+
+	return ""
 }

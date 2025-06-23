@@ -84,20 +84,35 @@ func TestGithubAppClientGetOrgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Account{}
-
+	want := []Account{
+		{
+			ID:        1,
+			Login:     "example-org-1",
+			Name:      "Example Org 1",
+			AvatarURL: "https://example.com/avatar.jpg",
+		},
+		{
+			ID:        2,
+			Login:     "example-org-2",
+			Name:      "Example Org 2",
+			AvatarURL: "https://example.com/avatar.jpg",
+		},
+	}
 	assert.Equal(t, want, orgs)
 }
 
-func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
+func TestGithubAppClientGetOrgsNotProvidingInstallationID(t *testing.T) {
+	cert := newTestCertificate(t)
 	srv := httptest.NewServer(newFakeGitHubServer(t,
-		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing")))
+		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
+		withPrivateKey("1234567", cert)))
 	defer srv.Close()
 	cfg := &mgmtv3.GithubAppConfig{
 		Hostname:     stripScheme(t, srv),
 		ClientID:     "test_client_id",
 		ClientSecret: "test_client_secret",
 		AppID:        "1234567",
+		PrivateKey:   string(cert),
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
@@ -105,9 +120,139 @@ func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Account{}
-
+	want := []Account{
+		{
+			ID:        1,
+			Login:     "example-org-1",
+			Name:      "Example Org 1",
+			AvatarURL: "https://example.com/avatar.jpg",
+		},
+		{
+			ID:        2,
+			Login:     "example-org-2",
+			Name:      "Example Org 2",
+			AvatarURL: "https://example.com/avatar.jpg",
+		},
+	}
 	assert.Equal(t, want, orgs)
+}
+
+func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
+	cert := newTestCertificate(t)
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
+		withPrivateKey("1234567", cert)))
+	defer srv.Close()
+	cfg := &mgmtv3.GithubAppConfig{
+		Hostname:       stripScheme(t, srv),
+		ClientID:       "test_client_id",
+		ClientSecret:   "test_client_secret",
+		AppID:          "1234567",
+		PrivateKey:     string(cert),
+		InstallationID: "1",
+	}
+
+	appClient := githubAppClient{httpClient: http.DefaultClient}
+	orgs, err := appClient.getOrgs(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Account{
+		{
+			ID:        1,
+			Login:     "example-org-1",
+			Name:      "Example Org 1",
+			AvatarURL: "https://example.com/avatar.jpg",
+			HTMLURL:   "",
+			Type:      "",
+		},
+	}
+	assert.Equal(t, want, orgs)
+}
+
+func TestGithubAppClientGetTeamsNotProvidingInstallationID(t *testing.T) {
+	cert := newTestCertificate(t)
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
+		withPrivateKey("1234567", cert)))
+	defer srv.Close()
+	cfg := &mgmtv3.GithubAppConfig{
+		Hostname:     stripScheme(t, srv),
+		ClientID:     "test_client_id",
+		ClientSecret: "test_client_secret",
+		AppID:        "1234567",
+		PrivateKey:   string(cert),
+	}
+
+	appClient := githubAppClient{httpClient: http.DefaultClient}
+	orgs, err := appClient.getTeams(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Account{
+		{
+			ID:        1215,
+			Login:     "justice-league",
+			Name:      "justice-league",
+			AvatarURL: "https://example.com/avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-1-teams/justice-league",
+		},
+		{
+			ID:        1216,
+			Login:     "justice-league",
+			Name:      "justice-league",
+			AvatarURL: "https://example.com/avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-2-teams/justice-league",
+		},
+	}
+	assert.Equal(t, want, orgs)
+}
+
+func TestGithubAppClientSearchUsersWithInstallationID(t *testing.T) {
+	cert := newTestCertificate(t)
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
+		withPrivateKey("1234567", cert)))
+	defer srv.Close()
+	cfg := &mgmtv3.GithubAppConfig{
+		Hostname:       stripScheme(t, srv),
+		ClientID:       "test_client_id",
+		ClientSecret:   "test_client_secret",
+		AppID:          "1234567",
+		PrivateKey:     string(cert),
+		InstallationID: "1",
+	}
+
+	appClient := githubAppClient{httpClient: http.DefaultClient}
+	orgs, err := appClient.searchUsers("octo", "", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Account{
+		{
+			ID:        1,
+			Login:     "octocat",
+			Name:      "monalisa octocat",
+			AvatarURL: "https://github.com/images/error/octocat_happy.gif",
+			HTMLURL:   "https://github.com/octocat",
+			Type:      "User",
+		},
+	}
+	assert.Equal(t, want, orgs)
+
+	// 	t.Fatal(err)
+	// }
+	// want := []Account{
+	// 	{
+	// 		ID:        1,
+	// 		Login:     "octocat",
+	// 		Name:      "monalisa octocat",
+	// 		AvatarURL: "https://github.com/images/error/octocat_happy.gif",
+	// 		HTMLURL:   "https://github.com/octocat",
+	// 		Type:      "User",
+	// 	},
+	// }
+	// assert.Equal(t, want, orgs)
 }
 
 func stripScheme(t *testing.T, ts *httptest.Server) string {
