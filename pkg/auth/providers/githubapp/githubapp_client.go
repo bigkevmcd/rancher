@@ -111,25 +111,27 @@ func (g *githubAppClient) getOrgs(config *mgmtv3.GithubAppConfig) ([]Account, er
 	return data.ListOrgs(), nil
 }
 
-func (g *githubAppClient) getTeams(githubAccessToken string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	var teams []Account
-
-	url := g.getURL("TEAMS", config)
-	responses, err := g.paginateGithub(githubAccessToken, url)
+func (g *githubAppClient) getTeams(config *mgmtv3.GithubAppConfig) ([]Account, error) {
+	appID, err := strconv.ParseInt(config.AppID, 10, 64)
 	if err != nil {
-		logrus.Errorf("Github getGithubTeams: GET url %v received error from github, err: %v", url, err)
-		return teams, err
+		return nil, fmt.Errorf("parsing AppID: %w", err)
 	}
-	for _, response := range responses {
-		teamObjs, err := g.getTeamInfo(response, config)
-		if err != nil {
-			logrus.Errorf("Github getGithubTeams: received error unmarshalling teams array, err: %v", err)
-			return teams, err
-		}
-		teams = append(teams, teamObjs...)
 
+	var installationID int64
+	if config.InstallationID != "" {
+		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing InstallationID: %w", err)
+		}
+		installationID = parsed
 	}
-	return teams, nil
+
+	data, err := teamDataFromApp(context.Background(), appID, []byte(config.PrivateKey), installationID, g.getURL("", config))
+	if err != nil {
+		return nil, err
+	}
+
+	return data.ListTeams(), nil
 }
 
 // getOrgTeams returns the teams belonging to an organization.
