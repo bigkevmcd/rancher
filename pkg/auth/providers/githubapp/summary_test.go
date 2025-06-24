@@ -20,106 +20,119 @@ import (
 
 func TestGitHubAppData(t *testing.T) {
 	data := newGitHubAppData()
-	data.AddOrg(1234567, "example", "Example Org", "https://example.com/avatar1.jpg")
-	data.AddTeamToOrg("example", 34567, "dev-team", "https://example.com/org/example/team/dev-team")
-	data.AddMemberToTeamInOrg("example", "dev-team", "test-user")
-	data.AddTeamToOrg("example", 45678, "admin-team", "https://example.com/org/example/team/admin-team")
-	data.AddMemberToTeamInOrg("example", "example", "test-user")
+	data.addOrg(1234567, "example", "Example Org", "https://example.com/avatar1.jpg")
+	data.addTeamToOrg("example", 34567, "dev-team", "https://example.com/org/example/team/dev-team")
+	data.addMemberToTeamInOrg("example", "dev-team", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
+	data.addTeamToOrg("example", 45678, "admin-team", "https://example.com/org/example/team/admin-team")
+	data.addMemberToTeamInOrg("example", "example", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
 
-	data.AddOrg(2345678, "other-org", "Other Org", "https://examplecom/avatar2.jpg")
-	data.AddTeamToOrg("other-org", 23468, "dev-team2", "https://example.com/org/other-org/team/dev-team2")
-	data.AddMemberToTeamInOrg("other-org", "dev-team2", "test-user")
-	data.AddTeamToOrg("other-org", 34579, "admin-team2", "https://example.com/org/other-org/team-dev-team2")
-	data.AddMemberToTeamInOrg("other-org", "admin-team2", "test-user")
-	data.AddMemberToTeamInOrg("other-org", "admin-team2", "test-user2")
+	data.addOrg(2345678, "other-org", "Other Org", "https://examplecom/avatar2.jpg")
+	data.addTeamToOrg("other-org", 23468, "dev-team2", "https://example.com/org/other-org/team/dev-team2")
+	data.addMemberToTeamInOrg("other-org", "dev-team2", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
+	data.addTeamToOrg("other-org", 34579, "admin-team2", "https://example.com/org/other-org/team-dev-team2")
+	data.addMemberToTeamInOrg("other-org", "admin-team2", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
+	data.addMemberToTeamInOrg("other-org", "admin-team2", 1002, "test-user2", "Other User", "https://example.com/avatar3.jpg", "https://example.com/htmlpage")
+	data.addTeamToOrg("other-org", 34579, "admin-team2", "https://example.com/org/other-org/team-dev-team2")
 
-	data.AddOrg(3456789, "example2", "Example Org 2", "https://example.com/avatar2.jpg")
+	data.addOrg(3456789, "example2", "Example Org 2", "https://example.com/avatar2.jpg")
 
 	t.Run("member data", func(t *testing.T) {
-		want := map[string][]string{
-			"example":   []string{"dev-team", "example"},
-			"other-org": []string{"dev-team2", "admin-team2"},
+		want := member{
+			gitHubObject: gitHubObject{
+				id:        1001,
+				name:      "Test User",
+				login:     "test-user",
+				avatarURL: "https://example.com/avatar2.jpg",
+				htmlURL:   "https://example.com/html",
+			},
+			orgs: map[string][]string{
+				"example":   []string{"dev-team", "example"},
+				"other-org": []string{"dev-team2", "admin-team2"},
+			},
 		}
-		assert.Equal(t, want, data.Members["test-user"])
+		assert.Equal(t, want, data.members["test-user"])
 	})
 
 	t.Run("org data", func(t *testing.T) {
-		want := map[string]*Org{
+		want := map[string]*org{
 			"example": {
-				GitHubObject: GitHubObject{
-					ID:        1234567,
-					Name:      "Example Org",
-					Login:     "example",
-					AvatarURL: "https://example.com/avatar1.jpg",
+				gitHubObject: gitHubObject{
+					id:        1234567,
+					name:      "Example Org",
+					login:     "example",
+					avatarURL: "https://example.com/avatar1.jpg",
 				},
 
-				Teams: map[string]OrgTeam{
-					"admin-team": OrgTeam{
-						GitHubObject: GitHubObject{
-							ID: 45678,
+				teams: map[string]orgTeam{
+					"admin-team": orgTeam{
+						gitHubObject: gitHubObject{
+							id: 45678,
 						},
-						HTMLURL: "https://example.com/org/example/team/admin-team",
-						Slug:    "admin-team",
-						Members: []string{},
+						htmlURL: "https://example.com/org/example/team/admin-team",
+						slug:    "admin-team",
+						members: []string{},
 					},
-					"dev-team": OrgTeam{
-						GitHubObject: GitHubObject{
-							ID: 34567,
+					"dev-team": orgTeam{
+						gitHubObject: gitHubObject{
+							id: 34567,
 						},
-						HTMLURL: "https://example.com/org/example/team/dev-team",
-						Slug:    "dev-team",
-						Members: []string{
+						htmlURL: "https://example.com/org/example/team/dev-team",
+						slug:    "dev-team",
+						members: []string{
 							"test-user",
 						},
 					},
 				},
 			},
 			"other-org": {
-				GitHubObject: GitHubObject{
-					ID:        2345678,
-					Name:      "Other Org",
-					Login:     "other-org",
-					AvatarURL: "https://examplecom/avatar2.jpg",
+				gitHubObject: gitHubObject{
+					id:        2345678,
+					name:      "Other Org",
+					login:     "other-org",
+					avatarURL: "https://examplecom/avatar2.jpg",
 				},
 
-				Teams: map[string]OrgTeam{
+				teams: map[string]orgTeam{
 					"admin-team2": {
-						GitHubObject: GitHubObject{
-							ID: 34579,
+						gitHubObject: gitHubObject{
+							id: 34579,
 						},
-						Slug:    "admin-team2",
-						HTMLURL: "https://example.com/org/other-org/team-dev-team2",
-						Members: []string{
+						slug:    "admin-team2",
+						htmlURL: "https://example.com/org/other-org/team-dev-team2",
+						members: []string{
 							"test-user",
 							"test-user2",
 						},
 					},
 					"dev-team2": {
-						GitHubObject: GitHubObject{
-							ID: 23468,
+						gitHubObject: gitHubObject{
+							id: 23468,
 						},
-						HTMLURL: "https://example.com/org/other-org/team/dev-team2",
-						Slug:    "dev-team2",
-						Members: []string{
+						htmlURL: "https://example.com/org/other-org/team/dev-team2",
+						slug:    "dev-team2",
+						members: []string{
 							"test-user",
 						},
 					},
 				},
 			},
 			"example2": {
-				GitHubObject: GitHubObject{
-					Name:      "Example Org 2",
-					Login:     "example2",
-					AvatarURL: "https://example.com/avatar2.jpg",
-					ID:        3456789,
+				gitHubObject: gitHubObject{
+					name:      "Example Org 2",
+					login:     "example2",
+					avatarURL: "https://example.com/avatar2.jpg",
+					id:        3456789,
 				},
-				Teams: map[string]OrgTeam{},
+				teams: map[string]orgTeam{},
 			},
 		}
-		assert.Equal(t, want, data.Orgs)
+		assert.Equal(t, want, data.orgs)
 	})
 
 	t.Run("orgs for user", func(t *testing.T) {
+		orgs := data.orgsForUser("unknown")
+		assert.Empty(t, orgs)
+
 		// Does not include the third Organisation
 		want := []Account{
 			{
@@ -137,7 +150,11 @@ func TestGitHubAppData(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, want, data.OrgsForUser("test-user"))
+		orgs = data.orgsForUser("test-user")
+		slices.SortFunc(orgs, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, orgs)
 
 		want = []Account{
 			{
@@ -148,7 +165,11 @@ func TestGitHubAppData(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, want, data.OrgsForUser("test-user2"))
+		orgs = data.orgsForUser("test-user2")
+		slices.SortFunc(orgs, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, orgs)
 	})
 
 	t.Run("list all orgs", func(t *testing.T) {
@@ -243,7 +264,8 @@ func TestGitHubAppData(t *testing.T) {
 
 	t.Run("list all teams", func(t *testing.T) {
 		want := []Account{
-			{ID: 45678,
+			{
+				ID:        45678,
 				Login:     "admin-team",
 				Name:      "admin-team",
 				AvatarURL: "https://example.com/avatar1.jpg",
@@ -272,13 +294,55 @@ func TestGitHubAppData(t *testing.T) {
 			},
 		}
 
-		teams := data.ListTeams()
+		teams := data.listTeams()
 		slices.SortFunc(teams, func(a, b Account) int {
 			return strings.Compare(a.Login, b.Login)
 		})
 		assert.Equal(t, want, teams)
 	})
 
+	t.Run("search members", func(t *testing.T) {
+		members := data.searchMembers("unknown")
+		assert.Empty(t, members)
+
+		want := []Account{
+			{
+				ID:        1002,
+				Login:     "test-user2",
+				Name:      "Other User",
+				AvatarURL: "https://example.com/avatar3.jpg",
+				HTMLURL:   "https://example.com/htmlpage",
+			},
+		}
+
+		members = data.searchMembers("test-user2")
+		slices.SortFunc(members, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, members)
+
+		want = []Account{
+			{
+				ID:        1001,
+				Login:     "test-user",
+				Name:      "Test User",
+				AvatarURL: "https://example.com/avatar2.jpg",
+				HTMLURL:   "https://example.com/html",
+			},
+			{
+				ID:        1002,
+				Login:     "test-user2",
+				Name:      "Other User",
+				AvatarURL: "https://example.com/avatar3.jpg",
+				HTMLURL:   "https://example.com/htmlpage",
+			},
+		}
+		members = data.searchMembers("test-user")
+		slices.SortFunc(members, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, members)
+	})
 }
 
 func TestGitHubAppData_Errors(t *testing.T) {
@@ -298,30 +362,39 @@ func TestTeamDataFromApp(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := &GitHubAppData{
-			Orgs: map[string]*Org{
+		want := &gitHubAppData{
+			orgs: map[string]*org{
 				"example-org-1": {
-					GitHubObject: GitHubObject{
-						ID:        1,
-						Login:     "example-org-1",
-						AvatarURL: "https://example.com/avatar.jpg",
-						Name:      "Example Org 1",
+					gitHubObject: gitHubObject{
+						id:        1,
+						login:     "example-org-1",
+						avatarURL: "https://example.com/avatar.jpg",
+						name:      "Example Org 1",
 					},
-					Teams: map[string]OrgTeam{
+					teams: map[string]orgTeam{
 						"example-team": {
-							GitHubObject: GitHubObject{
-								ID: 12,
+							gitHubObject: gitHubObject{
+								id: 12,
 							},
-							HTMLURL: "https://example.com/org/example-org-1/team/example-team",
-							Slug:    "example-team",
-							Members: []string{"test-user"},
+							htmlURL: "https://example.com/org/example-org-1/team/example-team",
+							slug:    "example-team",
+							members: []string{"test-user"},
 						},
 					},
 				},
 			},
-			Members: map[string]map[string][]string{
-				"test-user": map[string][]string{
-					"example-org-1": []string{"example-team"},
+			members: map[string]member{
+				"test-user": {
+					gitHubObject: gitHubObject{
+						id:        1,
+						name:      "Test User",
+						login:     "test-user",
+						avatarURL: "https://example.com/1.jpg",
+						htmlURL:   "https://example.com/",
+					},
+					orgs: map[string][]string{
+						"example-org-1": []string{"example-team"},
+					},
 				},
 			},
 		}
@@ -351,49 +424,58 @@ func TestTeamDataFromApp(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := &GitHubAppData{
-			Orgs: map[string]*Org{
+		want := &gitHubAppData{
+			orgs: map[string]*org{
 				"example-org-1": {
-					GitHubObject: GitHubObject{
-						ID:        1,
-						Login:     "example-org-1",
-						AvatarURL: "https://example.com/avatar.jpg",
-						Name:      "Example Org 1",
+					gitHubObject: gitHubObject{
+						id:        1,
+						login:     "example-org-1",
+						avatarURL: "https://example.com/avatar.jpg",
+						name:      "Example Org 1",
 					},
-					Teams: map[string]OrgTeam{
+					teams: map[string]orgTeam{
 						"example-team": {
-							GitHubObject: GitHubObject{
-								ID: 12,
+							gitHubObject: gitHubObject{
+								id: 12,
 							},
-							HTMLURL: "https://example.com/org/example-org-1/team/example-team",
-							Slug:    "example-team",
-							Members: []string{"test-user"},
+							htmlURL: "https://example.com/org/example-org-1/team/example-team",
+							slug:    "example-team",
+							members: []string{"test-user"},
 						},
 					},
 				},
 				"example-org-2": {
-					GitHubObject: GitHubObject{
-						ID:        2,
-						Login:     "example-org-2",
-						AvatarURL: "https://example.com/avatar.jpg",
-						Name:      "Example Org 2",
+					gitHubObject: gitHubObject{
+						id:        2,
+						login:     "example-org-2",
+						avatarURL: "https://example.com/avatar.jpg",
+						name:      "Example Org 2",
 					},
-					Teams: map[string]OrgTeam{
+					teams: map[string]orgTeam{
 						"example-team": {
-							GitHubObject: GitHubObject{
-								ID: 12,
+							gitHubObject: gitHubObject{
+								id: 12,
 							},
-							HTMLURL: "https://example.com/org/example-org-2/team/example-team",
-							Slug:    "example-team",
-							Members: []string{"test-user"},
+							htmlURL: "https://example.com/org/example-org-2/team/example-team",
+							slug:    "example-team",
+							members: []string{"test-user"},
 						},
 					},
 				},
 			},
-			Members: map[string]map[string][]string{
-				"test-user": map[string][]string{
-					"example-org-1": []string{"example-team"},
-					"example-org-2": []string{"example-team"},
+			members: map[string]member{
+				"test-user": member{
+					gitHubObject: gitHubObject{
+						id:        1,
+						name:      "Test User",
+						login:     "test-user",
+						avatarURL: "https://example.com/1.jpg",
+						htmlURL:   "https://example.com/",
+					},
+					orgs: map[string][]string{
+						"example-org-1": []string{"example-team"},
+						"example-org-2": []string{"example-team"},
+					},
 				},
 			},
 		}
@@ -483,9 +565,12 @@ func startFakeGitHubServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("GET /api/v3/organizations/{organizationID}/team/{teamID}/members", func(w http.ResponseWriter, r *http.Request) {
 		marshalJSON(t, w, []any{
 			map[string]any{
-				"login":   "test-user",
-				"id":      1,
-				"node_id": "MDQ6VXNlcjE=",
+				"login":      "test-user",
+				"id":         1,
+				"node_id":    "MDQ6VXNlcjE=",
+				"name":       "Test User",
+				"avatar_url": "https://example.com/1.jpg",
+				"html_url":   "https://example.com/",
 			},
 		})
 	})

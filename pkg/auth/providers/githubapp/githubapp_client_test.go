@@ -1,9 +1,12 @@
 package githubapp
 
 import (
+	"cmp"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
+	"strings"
 	"testing"
 
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
@@ -98,6 +101,9 @@ func TestGithubAppClientGetOrgs(t *testing.T) {
 			AvatarURL: "https://example.com/avatar.jpg",
 		},
 	}
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return strings.Compare(a.Login, b.Login)
+	})
 	assert.Equal(t, want, orgs)
 }
 
@@ -117,6 +123,10 @@ func TestGithubAppClientGetOrgsNotProvidingInstallationID(t *testing.T) {
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
 	orgs, err := appClient.getOrgs(cfg)
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return strings.Compare(a.Login, b.Login)
+	})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,70 +199,26 @@ func TestGithubAppClientGetTeamsNotProvidingInstallationID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := []Account{
 		{
 			ID:        1215,
-			Login:     "justice-league",
-			Name:      "justice-league",
+			Login:     "dev-team",
+			Name:      "dev-team",
 			AvatarURL: "https://example.com/avatar.jpg",
-			HTMLURL:   "https://github.com/orgs/example-org-1-teams/justice-league",
-		},
+			HTMLURL:   "https://github.com/orgs/example-org-1/dev-team"},
 		{
 			ID:        1216,
-			Login:     "justice-league",
-			Name:      "justice-league",
+			Login:     "dev-team",
+			Name:      "dev-team",
 			AvatarURL: "https://example.com/avatar.jpg",
-			HTMLURL:   "https://github.com/orgs/example-org-2-teams/justice-league",
+			HTMLURL:   "https://github.com/orgs/example-org-2/dev-team",
 		},
 	}
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	assert.Equal(t, want, orgs)
-}
-
-func TestGithubAppClientSearchUsersWithInstallationID(t *testing.T) {
-	cert := newTestCertificate(t)
-	srv := httptest.NewServer(newFakeGitHubServer(t,
-		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
-		withPrivateKey("1234567", cert)))
-	defer srv.Close()
-	cfg := &mgmtv3.GithubAppConfig{
-		Hostname:       stripScheme(t, srv),
-		ClientID:       "test_client_id",
-		ClientSecret:   "test_client_secret",
-		AppID:          "1234567",
-		PrivateKey:     string(cert),
-		InstallationID: "1",
-	}
-
-	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.searchUsers("octo", "", cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []Account{
-		{
-			ID:        1,
-			Login:     "octocat",
-			Name:      "monalisa octocat",
-			AvatarURL: "https://github.com/images/error/octocat_happy.gif",
-			HTMLURL:   "https://github.com/octocat",
-			Type:      "User",
-		},
-	}
-	assert.Equal(t, want, orgs)
-
-	// 	t.Fatal(err)
-	// }
-	// want := []Account{
-	// 	{
-	// 		ID:        1,
-	// 		Login:     "octocat",
-	// 		Name:      "monalisa octocat",
-	// 		AvatarURL: "https://github.com/images/error/octocat_happy.gif",
-	// 		HTMLURL:   "https://github.com/octocat",
-	// 		Type:      "User",
-	// 	},
-	// }
-	// assert.Equal(t, want, orgs)
 }
 
 func stripScheme(t *testing.T, ts *httptest.Server) string {
