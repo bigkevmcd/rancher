@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	cattlev3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/tomnomnom/linkheader"
@@ -45,7 +47,7 @@ func (g *githubAppClient) getAccessToken(code string, config *mgmtv3.GithubAppCo
 	form.Add("client_secret", config.ClientSecret)
 	form.Add("code", code)
 
-	url := g.getURL("TOKEN", config)
+	url := getAPIURL("TOKEN", config)
 
 	b, err := g.postToGithub(url, form)
 	if err != nil {
@@ -72,7 +74,7 @@ func (g *githubAppClient) getAccessToken(code string, config *mgmtv3.GithubAppCo
 }
 
 func (g *githubAppClient) getUser(githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
-	url := g.getURL("USER_INFO", config)
+	url := getAPIURL("USER_INFO", config)
 	b, _, err := g.getFromGithub(githubAccessToken, url)
 	if err != nil {
 		logrus.Errorf("Github getGithubUser: GET url %v received error from github, err: %v", url, err)
@@ -88,7 +90,8 @@ func (g *githubAppClient) getUser(githubAccessToken string, config *mgmtv3.Githu
 	return githubAcct, nil
 }
 
-func (g *githubAppClient) getOrgs(config *mgmtv3.GithubAppConfig) ([]Account, error) {
+// TODO: These two need to use the cache.
+func (g *githubAppClient) getOrgsForUser(username string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	appID, err := strconv.ParseInt(config.AppID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("parsing AppID: %w", err)
@@ -103,15 +106,15 @@ func (g *githubAppClient) getOrgs(config *mgmtv3.GithubAppConfig) ([]Account, er
 		installationID = parsed
 	}
 
-	data, err := teamDataFromApp(context.Background(), appID, []byte(config.PrivateKey), installationID, g.getURL("", config))
+	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
 	if err != nil {
 		return nil, err
 	}
 
-	return data.ListOrgs(), nil
+	return data.listOrgsForUser(username), nil
 }
 
-func (g *githubAppClient) getTeams(config *mgmtv3.GithubAppConfig) ([]Account, error) {
+func (g *githubAppClient) getTeamsForUser(username string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
 	appID, err := strconv.ParseInt(config.AppID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("parsing AppID: %w", err)
@@ -126,12 +129,68 @@ func (g *githubAppClient) getTeams(config *mgmtv3.GithubAppConfig) ([]Account, e
 		installationID = parsed
 	}
 
-	data, err := teamDataFromApp(context.Background(), appID, []byte(config.PrivateKey), installationID, g.getURL("", config))
+	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
 	if err != nil {
 		return nil, err
 	}
 
-	return data.listTeams(), nil
+	return data.listTeamsForUser(username), nil
+}
+
+func (g *githubAppClient) searchUsers(searchTerm, searchType string, config *cattlev3.GithubAppConfig) ([]Account, error) {
+	appID, err := strconv.ParseInt(config.AppID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parsing AppID: %w", err)
+	}
+
+	var installationID int64
+	if config.InstallationID != "" {
+		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing InstallationID: %w", err)
+		}
+		installationID = parsed
+	}
+
+	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+	if err != nil {
+		return nil, err
+	}
+
+	searchResult := data.searchOrgs(searchTerm)
+	searchResult = append(searchResult, data.searchMembers(searchTerm)...)
+	return searchResult, nil
+}
+
+func (g *githubAppClient) searchTeams(searchTerm string, config *cattlev3.GithubAppConfig) ([]Account, error) {
+	appID, err := strconv.ParseInt(config.AppID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parsing AppID: %w", err)
+	}
+
+	var installationID int64
+	if config.InstallationID != "" {
+		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing InstallationID: %w", err)
+		}
+		installationID = parsed
+	}
+
+	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+	if err != nil {
+		return nil, err
+	}
+
+	return data.searchTeams(searchTerm), nil
+}
+
+func (g *githubAppClient) getTeamByID(id string, config *mgmtv3.GithubAppConfig) (Account, error) {
+	return Account{}, errors.New("fail")
+}
+
+func (g *githubAppClient) getUserOrgByID(id string, config *mgmtv3.GithubAppConfig) (Account, error) {
+	return Account{}, errors.New("fail")
 }
 
 func (g *githubAppClient) postToGithub(url string, form url.Values) ([]byte, error) {
@@ -169,7 +228,7 @@ func (g *githubAppClient) getFromGithub(githubAccessToken string, url string) ([
 	}
 	req.Header.Add("Authorization", "token "+githubAccessToken)
 	req.Header.Add("Accept", "application/json")
-	req.Header.Add("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36)")
+	req.Header.Add("User-agent", "rancher/github-app-client")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
 		logrus.Errorf("Received error from github: %v", err)
@@ -192,7 +251,7 @@ func (g *githubAppClient) getFromGithub(githubAccessToken string, url string) ([
 	return b, nextURL, err
 }
 
-func (g *githubAppClient) getURL(endpoint string, config *mgmtv3.GithubAppConfig) string {
+func getAPIURL(endpoint string, config *mgmtv3.GithubAppConfig) string {
 	var hostName, apiEndpoint, toReturn string
 
 	if config.Hostname != "" {
@@ -242,44 +301,6 @@ func (g *githubAppClient) getURL(endpoint string, config *mgmtv3.GithubAppConfig
 
 	return toReturn
 }
-
-// func (g *githubAppClient) getTeamInfo(b []byte, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-// 	var teams []Account
-// 	var teamObjs []Team
-// 	if err := json.Unmarshal(b, &teamObjs); err != nil {
-// 		logrus.Errorf("Github getTeamInfo: received error unmarshalling team array, err: %v", err)
-// 		return teams, err
-// 	}
-
-// 	url := g.getURL("TEAM_PROFILE", config)
-// 	for _, team := range teamObjs {
-// 		teamAcct := Account{}
-// 		team.toGithubAccount(url, &teamAcct)
-// 		teams = append(teams, teamAcct)
-// 	}
-
-// 	return teams, nil
-// }
-
-// func (g *githubAppClient) getTeamByID(id string, githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
-// 	var teamAcct Account
-
-// 	url := g.getURL("TEAM", config) + id
-// 	b, _, err := g.getFromGithub(githubAccessToken, url)
-// 	if err != nil {
-// 		logrus.Errorf("Github getTeamByID: GET url %v received error from github, err: %v", url, err)
-// 		return teamAcct, err
-// 	}
-// 	var teamObj Team
-// 	if err := json.Unmarshal(b, &teamObj); err != nil {
-// 		logrus.Errorf("Github getTeamByID: received error unmarshalling team array, err: %v", err)
-// 		return teamAcct, err
-// 	}
-// 	url = g.getURL("TEAM_PROFILE", config)
-// 	teamObj.toGithubAccount(url, &teamAcct)
-
-// 	return teamAcct, nil
-// }
 
 func (g *githubAppClient) paginateGithub(githubAccessToken string, url string) ([][]byte, error) {
 	var responses [][]byte
