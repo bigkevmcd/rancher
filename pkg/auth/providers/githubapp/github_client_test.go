@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGitHubClientGetOrgTeams(t *testing.T) {
@@ -119,9 +120,7 @@ func TestGetUrlForOrgTeams(t *testing.T) {
 	}
 
 	teams, err := gcClient.searchTeams("dev", "", config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	if want, got := 2, len(teams); want != got {
 		t.Fatalf("Expected teams %d got %d", want, got)

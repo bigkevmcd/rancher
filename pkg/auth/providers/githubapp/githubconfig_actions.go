@@ -68,6 +68,7 @@ func formGithubRedirectURLFromMap(config map[string]interface{}) string {
 
 	requestHostname := convert.ToString(config[".host"])
 	clientIDs := convert.ToMapInterface(config["hostnameToClientId"])
+
 	if otherID, ok := clientIDs[requestHostname]; ok {
 		clientID = convert.ToString(otherID)
 	}
@@ -121,7 +122,7 @@ func (g *ghAppProvider) testAndApply(request *types.APIContext) error {
 	}
 
 	// if this works, save githubConfig CR adding enabled flag
-	user, err := g.userMGR.SetPrincipalOnCurrentUser(request, userPrincipal)
+	user, err := g.userManager.SetPrincipalOnCurrentUser(request, userPrincipal)
 	if err != nil {
 		return err
 	}

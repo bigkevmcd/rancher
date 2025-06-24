@@ -4,16 +4,21 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rancher/norman/types"
-	ext "github.com/rancher/rancher/pkg/apis/ext.cattle.io/v1"
-	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	cattlev3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
+	util2 "github.com/rancher/rancher/pkg/auth/util"
+	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
+	publicclient "github.com/rancher/rancher/pkg/client/generated/management/v3public"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -48,378 +53,416 @@ func (m *fakeTokensManager) UserAttributeCreateOrUpdate(userID, provider string,
 	return nil
 }
 
-func TestSearchPrincipals(t *testing.T) {
-	var userOrgs, orgTeams, searchUsersAll, searchUsersGroup, searchUsersUser []byte
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch path := r.URL.Path; path {
-		case "/api/v3/user/orgs":
-			w.Write(userOrgs)
-		case "/api/v3/orgs/devorg/teams":
-			w.Write(orgTeams)
-		case "/api/v3/search/users":
-			q := r.URL.Query().Get("q")
-			if strings.Contains(q, " type:org") {
-				w.Write(searchUsersGroup)
-			} else if strings.Contains(q, " type:user") {
-				w.Write(searchUsersUser)
-			} else {
-				w.Write(searchUsersAll)
-			}
-		default:
-			t.Errorf("Unexpected client call %s", path)
-		}
-	}))
-	defer srv.Close()
-
-	srvURL, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
+func TestLogOutAll(t *testing.T) {
+	provider := ghAppProvider{
+		ctx:          context.Background(),
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return nil, nil },
 	}
 
-	userOrgs = []byte(`
-	[{
-		"id": 9343010,
-		"login": "devorg",
-		"avatar_url": "` + srvURL.Host + `/u/9343010/avatar"
-	}]`)
-	orgTeams = []byte(`
-	[{
-		"id": 9933605,
-		"name": "developers",
-		"slug": "developers"
-	},{
-		"id": 9933606,
-		"name": "security",
-		"slug": "security"
-	}]`)
-	searchUsersAll = []byte(`{
-	"total_count": 2,
-  	"incomplete_results": false,
-  		"items": [{
-			"id": 9253000,
-			"login": "developer",
-			"avatar_url": "` + srvURL.Host + `/u/9253000/avatar",
-			"html_url": "` + srvURL.Host + `/developer",
-			"type": "User"
-		},{
-			"id": 9343010,
-			"login": "devorg",
-			"avatar_url": "` + srvURL.Host + `/u/9343010/avatar",
-			"html_url": "` + srvURL.Host + `/devorg",
-			"type": "Organization"
-		}]
-	}`)
-	searchUsersGroup = []byte(`{
-	"total_count": 1,
-  	"incomplete_results": false,
-  		"items": [{
-			"id": 9343010,
-			"login": "devorg",
-			"avatar_url": "` + srvURL.Host + `/u/9343010/avatar",
-			"html_url": "` + srvURL.Host + `/devorg",
-			"type": "Organization"
-		}]
-	}`)
-	searchUsersUser = []byte(`{
-	"total_count": 1,
-  	"incomplete_results": false,
-  		"items": [{
-			"id": 9253000,
-			"login": "developer",
-			"avatar_url": "` + srvURL.Host + `/u/9253000/avatar",
-			"html_url": "` + srvURL.Host + `/developer",
-			"type": "User"
-		}]
-	}`)
+	// LogoutAll does nothing in this case and does not fail.
+	assert.NoError(t, provider.LogoutAll(nil, nil))
+}
 
-	fakeTokensManager := &fakeTokensManager{
-		isMemberOfFunc: func(token accessor.TokenAccessor, group v3.Principal) bool {
-			return true
-		},
+func TestLogOut(t *testing.T) {
+	provider := ghAppProvider{
+		ctx:          context.Background(),
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return nil, nil },
 	}
-	config := &v32.GithubAppConfig{
-		Hostname: srvURL.Host,
+
+	// Logout does nothing in this case and does not fail.
+	assert.NoError(t, provider.Logout(nil, nil))
+}
+
+func TestGetName(t *testing.T) {
+	provider := ghAppProvider{
+		ctx:          context.Background(),
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return nil, nil },
 	}
+
+	assert.Equal(t, Name, provider.GetName())
+}
+
+func TestCustomizeSchema(t *testing.T) {
+	// This isn't currently tested
+}
+
+func TestTransformToAuthProvider(t *testing.T) {
+	config := &cattlev3.GithubAppConfig{}
 
 	provider := ghAppProvider{
 		ctx:          context.Background(),
-		githubClient: &GClient{httpClient: srv.Client()},
-		getConfig:    func() (*v32.GithubAppConfig, error) { return config, nil },
-		tokenMGR:     fakeTokensManager,
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return config, nil },
 	}
 
-	token := v32.Token{
-		UserPrincipal: v32.Principal{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "github_user://9253000",
+	t.Run("when no alternative client_id is provided for hostname", func(t *testing.T) {
+		rawAuthConfig := map[string]any{
+			client.GithubConfigFieldHostname: "suse.com",
+			client.GithubConfigFieldClientID: "test_client_id",
+			client.GithubConfigFieldTLS:      true,
+			".host":                          "example.com",
+		}
+
+		transformed, err := provider.TransformToAuthProvider(rawAuthConfig)
+		assert.NoError(t, err)
+
+		want := map[string]any{
+			"logoutAllEnabled":                          false,
+			"logoutAllForced":                           false,
+			"logoutAllSupported":                        false,
+			publicclient.GithubProviderFieldRedirectURL: "https://suse.com/login/oauth/authorize?client_id=test_client_id",
+		}
+		assert.Equal(t, want, transformed)
+	})
+
+	t.Run("when alternative client_id is provided for hostname", func(t *testing.T) {
+		rawAuthConfig := map[string]any{
+			client.GithubConfigFieldHostname: "suse.com",
+			client.GithubConfigFieldClientID: "test_client_id",
+			client.GithubConfigFieldTLS:      true,
+			".host":                          "example.com",
+			"hostnameToClientId": map[string]any{
+				"example.com": "other_client_id",
 			},
-			LoginName:     "developer",
-			PrincipalType: "user",
+		}
+
+		transformed, err := provider.TransformToAuthProvider(rawAuthConfig)
+		assert.NoError(t, err)
+
+		// The client_id is replaced with the correct client_id for the host.
+		want := map[string]any{
+			"logoutAllEnabled":   false,
+			"logoutAllForced":    false,
+			"logoutAllSupported": false,
+			"redirectUrl":        "https://suse.com/login/oauth/authorize?client_id=other_client_id",
+		}
+		assert.Equal(t, want, transformed)
+	})
+}
+
+func TestAuthenticateUser(t *testing.T) {
+	authCode := "1234567"
+	appID := "23456"
+	privateKey := newTestCertificate(t)
+
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", authCode, "http://localhost:3000/callback", "testing"),
+		withPrivateKey(appID, privateKey),
+	))
+	defer srv.Close()
+
+	config := &mgmtv3.GithubAppConfig{
+		Hostname:     stripScheme(t, srv),
+		ClientID:     "test_client_id",
+		ClientSecret: "test_client_secret",
+		AppID:        appID,
+		PrivateKey:   string(privateKey),
+	}
+	provider := ghAppProvider{
+		ctx:          context.Background(),
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return config, nil },
+		userManager:  &fakeUserManager{},
+	}
+	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	assert.NoError(t, err)
+
+	ctx := context.WithValue(context.Background(), util2.RequestKey, req)
+	input := &cattlev3.GithubLogin{
+		Code: authCode,
+	}
+	userPrincipal, groupPrincipals, token, err := provider.AuthenticateUser(ctx, input)
+	assert.NoError(t, err)
+
+	wantUser := v3.Principal{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "githubapp_user://1",
+		},
+		DisplayName:    "monalisa octocat",
+		LoginName:      "octocat",
+		ProfilePicture: "https://github.com/images/error/octocat_happy.gif",
+		PrincipalType:  "user",
+		Me:             true,
+		Provider:       "githubapp",
+	}
+	assert.Equal(t, wantUser, userPrincipal)
+
+	wantGroups := []v3.Principal{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_org://1",
+			},
+			DisplayName:    "Example Org 1",
+			LoginName:      "example-org-1",
+			ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+			ProfileURL:     "",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_org://2",
+			},
+			DisplayName:    "Example Org 2",
+			LoginName:      "example-org-2",
+			ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_team://1215",
+			},
+			DisplayName: "dev-team", LoginName: "dev-team", ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+			PrincipalType: "group",
+			MemberOf:      true,
+			Provider:      "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_team://1217",
+			},
+			DisplayName:    "test-team",
+			LoginName:      "test-team",
+			ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_team://1216",
+			},
+			DisplayName:    "dev-team",
+			LoginName:      "dev-team",
+			ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
 		},
 	}
 
-	// Search for groups and users.
-	found, err := provider.SearchPrincipals("dev", "", &token)
-	if err != nil {
-		t.Fatal(err)
+	slices.SortFunc(groupPrincipals, func(a, b v3.Principal) int {
+		return strings.Compare(a.ObjectMeta.Name, a.ObjectMeta.Name)
+	})
+
+	assert.Equal(t, wantGroups, groupPrincipals)
+	assert.Empty(t, token)
+}
+
+func TestRefetchGroupPrincipals(t *testing.T) {
+	authCode := "1234567"
+	appID := "23456"
+	privateKey := newTestCertificate(t)
+
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", authCode, "http://localhost:3000/callback", "testing"),
+		withPrivateKey(appID, privateKey),
+	))
+	defer srv.Close()
+
+	config := &mgmtv3.GithubAppConfig{
+		Hostname:     stripScheme(t, srv),
+		ClientID:     "test_client_id",
+		ClientSecret: "test_client_secret",
+		AppID:        appID,
+		PrivateKey:   string(privateKey),
+	}
+	provider := ghAppProvider{
+		ctx:          context.Background(),
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return config, nil },
+		userManager:  &fakeUserManager{},
 	}
 
-	if got := len(found); got != 3 {
-		t.Fatalf("got %d principals want 3", got)
+	principals, err := provider.RefetchGroupPrincipals("githubapp_user://1", "unused parameter")
+	require.NoError(t, err)
+
+	want := []v3.Principal{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_org://1",
+			},
+			DisplayName:    "Example Org 1",
+			LoginName:      "example-org-1",
+			ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_org://2",
+			},
+			DisplayName:    "Example Org 2",
+			LoginName:      "example-org-2",
+			ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_team://1215",
+			},
+			DisplayName:    "dev-team",
+			LoginName:      "dev-team",
+			ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_team://1217",
+			},
+			DisplayName:    "test-team",
+			LoginName:      "test-team",
+			ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "githubapp_team://1216",
+			},
+			DisplayName:    "dev-team",
+			LoginName:      "dev-team",
+			ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+			PrincipalType:  "group",
+			MemberOf:       true,
+			Provider:       "githubapp",
+		},
+	}
+	slices.SortFunc(principals, func(a, b v3.Principal) int {
+		return strings.Compare(a.ObjectMeta.Name, a.ObjectMeta.Name)
+	})
+	assert.Equal(t, want, principals)
+}
+
+func TestSearchPrincipals(t *testing.T) {
+	authCode := "1234567"
+	appID := "23456"
+	privateKey := newTestCertificate(t)
+
+	srv := httptest.NewServer(newFakeGitHubServer(t,
+		withTestCode("test_client_id", authCode, "http://localhost:3000/callback", "testing"),
+		withPrivateKey(appID, privateKey),
+	))
+	defer srv.Close()
+
+	config := &mgmtv3.GithubAppConfig{
+		Hostname:     stripScheme(t, srv),
+		ClientID:     "test_client_id",
+		ClientSecret: "test_client_secret",
+		AppID:        appID,
+		PrivateKey:   string(privateKey),
+	}
+	provider := ghAppProvider{
+		ctx:          context.Background(),
+		githubClient: &githubAppClient{httpClient: http.DefaultClient},
+		getConfig:    func() (*cattlev3.GithubAppConfig, error) { return config, nil },
+		userManager:  &fakeUserManager{},
 	}
 
-	for _, p := range found {
-		switch p.LoginName {
-		case "devorg":
-			if want, got := false, p.Me; want != got {
-				t.Errorf("[%s] Expected Me %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := true, p.MemberOf; want != got {
-				t.Errorf("[%s] Expected MemberOf %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := "group", p.PrincipalType; want != got {
-				t.Errorf("[%s] Expected PrincipalType %s, got %s", p.LoginName, want, got)
-			}
-		case "developer":
-			if want, got := true, p.Me; want != got {
-				t.Errorf("[%s] Expected Me %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := "user", p.PrincipalType; want != got {
-				t.Errorf("[%s] Expected PrincipalType %s, got %s", p.LoginName, want, got)
-			}
-		case "developers":
-			if want, got := false, p.Me; want != got {
-				t.Errorf("[%s] Expected Me %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := true, p.MemberOf; want != got {
-				t.Errorf("[%s] Expected MemberOf %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := "group", p.PrincipalType; want != got {
-				t.Errorf("[%s] Expected PrincipalType %s, got %s", p.LoginName, want, got)
-			}
-		default:
-			t.Errorf("Unexpected principal %s", p.LoginName)
-		}
+	searchTests := map[string]struct {
+		key           string
+		principalType string
+		want          []v3.Principal
+	}{
+		"searching for users": {
+			"octocat",
+			"user",
+			[]v3.Principal{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_user://1",
+					},
+					DisplayName:    "octocat",
+					LoginName:      "octocat",
+					ProfilePicture: "https://github.com/images/error/octocat_happy.gif",
+					PrincipalType:  userType,
+					Provider:       "githubapp",
+				},
+			},
+		},
+		"searching for orgs": {
+			"example-org-2",
+			"group",
+			[]v3.Principal{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_org://2",
+					},
+					DisplayName:    "Example Org 2",
+					LoginName:      "example-org-2",
+					ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+					PrincipalType:  "group",
+					Provider:       "githubapp",
+				},
+			},
+		},
 	}
 
-	// Search for groups only.
-	found, err = provider.SearchPrincipals("dev", "group", &token)
-	if err != nil {
-		t.Fatal(err)
+	for name, tt := range searchTests {
+		t.Run(name, func(t *testing.T) {
+			accts, err := provider.SearchPrincipals(tt.key, tt.principalType, nil)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, accts)
+		})
 	}
 
-	if want, got := 2, len(found); want != got {
-		t.Fatalf("Expected principals %d got %d", want, got)
+}
+
+func TestParsePrincipalID(t *testing.T) {
+	parseTests := []struct {
+		principalID string
+		wantKind    string
+		wantID      int
+	}{
+		{
+			"githubapp_user://867746",
+			userType,
+			867746,
+		},
 	}
 
-	for _, p := range found {
-		switch p.LoginName {
-		case "devorg", "developers":
-		default:
-			t.Errorf("Unexpected principal %s", p.LoginName)
-		}
-	}
+	for _, tt := range parseTests {
+		principalKind, id, err := parsePrincipalID(tt.principalID)
+		require.NoError(t, err)
 
-	// Search for users only.
-	found, err = provider.SearchPrincipals("dev", "user", &token)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want, got := 1, len(found); want != got {
-		t.Fatalf("Expected principals %d got %d", want, got)
-	}
-
-	if found[0].LoginName != "developer" {
-		t.Errorf("Unexpected principal %s", found[0].LoginName)
+		assert.Equal(t, tt.wantKind, principalKind)
+		assert.Equal(t, tt.wantID, id)
 	}
 }
 
-func TestSearchPrincipalsExt(t *testing.T) {
-	var userOrgs, orgTeams, searchUsersAll, searchUsersGroup, searchUsersUser []byte
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch path := r.URL.Path; path {
-		case "/api/v3/user/orgs":
-			w.Write(userOrgs)
-		case "/api/v3/orgs/devorg/teams":
-			w.Write(orgTeams)
-		case "/api/v3/search/users":
-			q := r.URL.Query().Get("q")
-			if strings.Contains(q, " type:org") {
-				w.Write(searchUsersGroup)
-			} else if strings.Contains(q, " type:user") {
-				w.Write(searchUsersUser)
-			} else {
-				w.Write(searchUsersAll)
-			}
-		default:
-			t.Errorf("Unexpected client call %s", path)
-		}
-	}))
-	defer srv.Close()
-
-	srvURL, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
+func TestParsePrincipalIDErrors(t *testing.T) {
+	parseTests := []string{
+		"githubapp_user://testing",
+		"github://",
 	}
 
-	userOrgs = []byte(`
-	[{
-		"id": 9343010,
-		"login": "devorg",
-		"avatar_url": "` + srvURL.Host + `/u/9343010/avatar"
-	}]`)
-	orgTeams = []byte(`
-	[{
-		"id": 9933605,
-		"name": "developers",
-		"slug": "developers"
-	},{
-		"id": 9933606,
-		"name": "security",
-		"slug": "security"
-	}]`)
-	searchUsersAll = []byte(`{
-	"total_count": 2,
-  	"incomplete_results": false,
-  		"items": [{
-			"id": 9253000,
-			"login": "developer",
-			"avatar_url": "` + srvURL.Host + `/u/9253000/avatar",
-			"html_url": "` + srvURL.Host + `/developer",
-			"type": "User"
-		},{
-			"id": 9343010,
-			"login": "devorg",
-			"avatar_url": "` + srvURL.Host + `/u/9343010/avatar",
-			"html_url": "` + srvURL.Host + `/devorg",
-			"type": "Organization"
-		}]
-	}`)
-	searchUsersGroup = []byte(`{
-	"total_count": 1,
-  	"incomplete_results": false,
-  		"items": [{
-			"id": 9343010,
-			"login": "devorg",
-			"avatar_url": "` + srvURL.Host + `/u/9343010/avatar",
-			"html_url": "` + srvURL.Host + `/devorg",
-			"type": "Organization"
-		}]
-	}`)
-	searchUsersUser = []byte(`{
-	"total_count": 1,
-  	"incomplete_results": false,
-  		"items": [{
-			"id": 9253000,
-			"login": "developer",
-			"avatar_url": "` + srvURL.Host + `/u/9253000/avatar",
-			"html_url": "` + srvURL.Host + `/developer",
-			"type": "User"
-		}]
-	}`)
+	for _, tt := range parseTests {
+		_, _, err := parsePrincipalID(tt)
 
-	fakeTokensManager := &fakeTokensManager{
-		isMemberOfFunc: func(token accessor.TokenAccessor, group v3.Principal) bool {
-			return true
-		},
+		assert.ErrorContains(t, err, "invalid id "+tt)
 	}
-	config := &v32.GithubAppConfig{
-		Hostname: srvURL.Host,
-	}
+}
 
-	provider := ghAppProvider{
-		ctx:          context.Background(),
-		githubClient: &GClient{httpClient: srv.Client()},
-		getConfig:    func() (*v32.GithubAppConfig, error) { return config, nil },
-		tokenMGR:     fakeTokensManager,
-	}
+type fakeUserManager struct {
+}
 
-	token := ext.Token{
-		Spec: ext.TokenSpec{
-			UserPrincipal: ext.TokenPrincipal{
-				Name:          "github_user://9253000",
-				LoginName:     "developer",
-				PrincipalType: "user",
-			},
-		},
-	}
+func (f *fakeUserManager) CheckAccess(accessMode string, allowedPrincipalIDs []string, userPrincipalID string, groups []v3.Principal) (bool, error) {
+	return true, nil
+}
 
-	// Search for groups and users.
-	found, err := provider.SearchPrincipals("dev", "", &token)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want, got := 3, len(found); want != got {
-		t.Fatalf("Expected principals %d got %d", want, got)
-	}
-
-	for _, p := range found {
-		switch p.LoginName {
-		case "devorg":
-			if want, got := false, p.Me; want != got {
-				t.Errorf("[%s] Expected Me %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := true, p.MemberOf; want != got {
-				t.Errorf("[%s] Expected MemberOf %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := "group", p.PrincipalType; want != got {
-				t.Errorf("[%s] Expected PrincipalType %s, got %s", p.LoginName, want, got)
-			}
-		case "developer":
-			if want, got := true, p.Me; want != got {
-				t.Errorf("[%s] Expected Me %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := "user", p.PrincipalType; want != got {
-				t.Errorf("[%s] Expected PrincipalType %s, got %s", p.LoginName, want, got)
-			}
-		case "developers":
-			if want, got := false, p.Me; want != got {
-				t.Errorf("[%s] Expected Me %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := true, p.MemberOf; want != got {
-				t.Errorf("[%s] Expected MemberOf %t, got %t", p.LoginName, want, got)
-			}
-			if want, got := "group", p.PrincipalType; want != got {
-				t.Errorf("[%s] Expected PrincipalType %s, got %s", p.LoginName, want, got)
-			}
-		default:
-			t.Errorf("Unexpected principal %s", p.LoginName)
-		}
-	}
-
-	// Search for groups only.
-	found, err = provider.SearchPrincipals("dev", "group", &token)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want, got := 2, len(found); want != got {
-		t.Fatalf("Expected principals %d got %d", want, got)
-	}
-
-	for _, p := range found {
-		switch p.LoginName {
-		case "devorg", "developers":
-		default:
-			t.Errorf("Unexpected principal %s", p.LoginName)
-		}
-	}
-
-	// Search for users only.
-	found, err = provider.SearchPrincipals("dev", "user", &token)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want, got := 1, len(found); want != got {
-		t.Fatalf("Expected principals %d got %d", want, got)
-	}
-
-	if found[0].LoginName != "developer" {
-		t.Errorf("Unexpected principal %s", found[0].LoginName)
-	}
+func (f *fakeUserManager) SetPrincipalOnCurrentUser(apiContext *types.APIContext, principal v3.Principal) (*v3.User, error) {
+	return nil, nil
 }

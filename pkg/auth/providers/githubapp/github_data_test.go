@@ -21,18 +21,18 @@ import (
 func TestGitHubAppData(t *testing.T) {
 	data := newGitHubAppData()
 	data.addOrg(1234567, "example", "Example Org", "https://example.com/avatar1.jpg")
-	data.addTeamToOrg("example", 34567, "dev-team", "https://example.com/org/example/team/dev-team")
+	data.addTeamToOrg("example", 34567, "dev-team", "dev team", "https://example.com/avatar.jpg", "https://example.com/org/example/team/dev-team")
 	data.addMemberToTeamInOrg("example", "dev-team", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
-	data.addTeamToOrg("example", 45678, "admin-team", "https://example.com/org/example/team/admin-team")
+	data.addTeamToOrg("example", 45678, "admin-team", "admin team", "https://example.com/avatar.jpg", "https://example.com/org/example/team/admin-team")
 	data.addMemberToTeamInOrg("example", "example", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
 
-	data.addOrg(2345678, "other-org", "Other Org", "https://examplecom/avatar2.jpg")
-	data.addTeamToOrg("other-org", 23468, "dev-team2", "https://example.com/org/other-org/team/dev-team2")
+	data.addOrg(2345678, "other-org", "Other Org", "https://example.com/avatar2.jpg")
+	data.addTeamToOrg("other-org", 23468, "dev-team2", "dev team 2", "https://example.com/avatar.jpg", "https://example.com/org/other-org/team/dev-team2")
 	data.addMemberToTeamInOrg("other-org", "dev-team2", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
-	data.addTeamToOrg("other-org", 34579, "admin-team2", "https://example.com/org/other-org/team-dev-team2")
+	data.addTeamToOrg("other-org", 34579, "admin-team2", "admin team 2", "https://example.com/avatar.jpg", "https://example.com/org/other-org/team-dev-team2")
 	data.addMemberToTeamInOrg("other-org", "admin-team2", 1001, "test-user", "Test User", "https://example.com/avatar2.jpg", "https://example.com/html")
 	data.addMemberToTeamInOrg("other-org", "admin-team2", 1002, "test-user2", "Other User", "https://example.com/avatar3.jpg", "https://example.com/htmlpage")
-	data.addTeamToOrg("other-org", 34579, "admin-team2", "https://example.com/org/other-org/team-dev-team2")
+	data.addTeamToOrg("other-org", 45790, "admin-team2", "admin team 2", "https://example.com/otheravatar.jpg", "https://example.com/org/other-org/team-dev-team2")
 
 	data.addOrg(3456789, "example2", "Example Org 2", "https://example.com/avatar2.jpg")
 
@@ -66,18 +66,22 @@ func TestGitHubAppData(t *testing.T) {
 				teams: map[string]orgTeam{
 					"admin-team": orgTeam{
 						gitHubObject: gitHubObject{
-							id: 45678,
+							id:        45678,
+							avatarURL: "https://example.com/avatar.jpg",
+							htmlURL:   "https://example.com/org/example/team/admin-team",
+							login:     "admin-team",
+							name:      "admin team",
 						},
-						htmlURL: "https://example.com/org/example/team/admin-team",
-						slug:    "admin-team",
 						members: []string{},
 					},
 					"dev-team": orgTeam{
 						gitHubObject: gitHubObject{
-							id: 34567,
+							id:        34567,
+							avatarURL: "https://example.com/avatar.jpg",
+							htmlURL:   "https://example.com/org/example/team/dev-team",
+							login:     "dev-team",
+							name:      "dev team",
 						},
-						htmlURL: "https://example.com/org/example/team/dev-team",
-						slug:    "dev-team",
 						members: []string{
 							"test-user",
 						},
@@ -89,16 +93,18 @@ func TestGitHubAppData(t *testing.T) {
 					id:        2345678,
 					name:      "Other Org",
 					login:     "other-org",
-					avatarURL: "https://examplecom/avatar2.jpg",
+					avatarURL: "https://example.com/avatar2.jpg",
 				},
 
 				teams: map[string]orgTeam{
 					"admin-team2": {
 						gitHubObject: gitHubObject{
-							id: 34579,
+							id:        34579,
+							login:     "admin-team2",
+							name:      "admin team 2",
+							htmlURL:   "https://example.com/org/other-org/team-dev-team2",
+							avatarURL: "https://example.com/avatar.jpg",
 						},
-						slug:    "admin-team2",
-						htmlURL: "https://example.com/org/other-org/team-dev-team2",
 						members: []string{
 							"test-user",
 							"test-user2",
@@ -106,10 +112,12 @@ func TestGitHubAppData(t *testing.T) {
 					},
 					"dev-team2": {
 						gitHubObject: gitHubObject{
-							id: 23468,
+							id:        23468,
+							htmlURL:   "https://example.com/org/other-org/team/dev-team2",
+							name:      "dev team 2",
+							login:     "dev-team2",
+							avatarURL: "https://example.com/avatar.jpg",
 						},
-						htmlURL: "https://example.com/org/other-org/team/dev-team2",
-						slug:    "dev-team2",
 						members: []string{
 							"test-user",
 						},
@@ -130,7 +138,7 @@ func TestGitHubAppData(t *testing.T) {
 	})
 
 	t.Run("orgs for user", func(t *testing.T) {
-		orgs := data.orgsForUser("unknown")
+		orgs := data.listOrgsForUser("unknown")
 		assert.Empty(t, orgs)
 
 		// Does not include the third Organisation
@@ -146,11 +154,11 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        2345678,
 				Login:     "other-org",
 				Name:      "Other Org",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 			},
 		}
 
-		orgs = data.orgsForUser("test-user")
+		orgs = data.listOrgsForUser("test-user")
 		slices.SortFunc(orgs, func(a, b Account) int {
 			return strings.Compare(a.Login, b.Login)
 		})
@@ -161,11 +169,11 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        2345678,
 				Login:     "other-org",
 				Name:      "Other Org",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 			},
 		}
 
-		orgs = data.orgsForUser("test-user2")
+		orgs = data.listOrgsForUser("test-user2")
 		slices.SortFunc(orgs, func(a, b Account) int {
 			return strings.Compare(a.Login, b.Login)
 		})
@@ -191,10 +199,10 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        2345678,
 				Login:     "other-org",
 				Name:      "Other Org",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 			},
 		}
-		orgs := data.ListOrgs()
+		orgs := data.listOrgs()
 		slices.SortFunc(orgs, func(a, b Account) int {
 			return strings.Compare(a.Login, b.Login)
 		})
@@ -214,7 +222,7 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        34579,
 				Login:     "admin-team2",
 				Name:      "admin-team2",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/org/other-org/team-dev-team2",
 			},
 			{
@@ -228,11 +236,11 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        23468,
 				Login:     "dev-team2",
 				Name:      "dev-team2",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/org/other-org/team/dev-team2",
 			},
 		}
-		accounts := data.TeamsForUser("test-user")
+		accounts := data.listTeamsForUser("test-user")
 		slices.SortFunc(accounts, func(a, b Account) int {
 			return strings.Compare(a.Login, b.Login)
 		})
@@ -244,18 +252,18 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        34579,
 				Login:     "admin-team2",
 				Name:      "admin-team2",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/org/other-org/team-dev-team2",
 			},
 			{
 				ID:        23468,
 				Login:     "dev-team2",
 				Name:      "dev-team2",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/org/other-org/team/dev-team2",
 			},
 		}
-		accounts = data.TeamsForUser("test-user2")
+		accounts = data.listTeamsForUser("test-user2")
 		slices.SortFunc(accounts, func(a, b Account) int {
 			return strings.Compare(a.Login, b.Login)
 		})
@@ -275,7 +283,7 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        34579,
 				Login:     "admin-team2",
 				Name:      "admin-team2",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/org/other-org/team-dev-team2",
 			},
 			{
@@ -289,7 +297,7 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        23468,
 				Login:     "dev-team2",
 				Name:      "dev-team2",
-				AvatarURL: "https://examplecom/avatar2.jpg",
+				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/org/other-org/team/dev-team2",
 			},
 		}
@@ -343,6 +351,109 @@ func TestGitHubAppData(t *testing.T) {
 		})
 		assert.Equal(t, want, members)
 	})
+
+	t.Run("search teams", func(t *testing.T) {
+		teams := data.searchTeams("unknown")
+		assert.Empty(t, teams)
+
+		want := []Account{
+			{
+				ID:        34567,
+				Login:     "dev-team",
+				Name:      "dev team",
+				AvatarURL: "https://example.com/avatar1.jpg",
+				HTMLURL:   "https://example.com/org/example/team/dev-team",
+			},
+			{
+				ID:        23468,
+				Login:     "dev-team2",
+				Name:      "dev team 2",
+				AvatarURL: "https://example.com/avatar2.jpg",
+				HTMLURL:   "https://example.com/org/other-org/team/dev-team2",
+			},
+		}
+
+		teams = data.searchTeams("dev-team")
+		slices.SortFunc(teams, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, teams)
+
+		want = []Account{
+			{
+				ID:        23468,
+				Login:     "dev-team2",
+				Name:      "dev team 2",
+				AvatarURL: "https://example.com/avatar2.jpg",
+				HTMLURL:   "https://example.com/org/other-org/team/dev-team2",
+			},
+		}
+
+		teams = data.searchTeams("dev-team2")
+		assert.Equal(t, want, teams)
+	})
+
+	t.Run("search orgs", func(t *testing.T) {
+		want := []Account{
+			{
+
+				ID:        2345678,
+				Login:     "other-org",
+				Name:      "Other Org",
+				AvatarURL: "https://example.com/avatar2.jpg",
+			},
+		}
+		orgs := data.searchOrgs("other")
+		slices.SortFunc(orgs, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, orgs)
+
+		want = []Account{
+			{
+				ID:        1234567,
+				Login:     "example",
+				Name:      "Example Org",
+				AvatarURL: "https://example.com/avatar1.jpg",
+			},
+			{
+				ID:        3456789,
+				Login:     "example2",
+				Name:      "Example Org 2",
+				AvatarURL: "https://example.com/avatar2.jpg",
+			},
+		}
+		orgs = data.searchOrgs("example")
+		slices.SortFunc(orgs, func(a, b Account) int {
+			return strings.Compare(a.Login, b.Login)
+		})
+		assert.Equal(t, want, orgs)
+	})
+
+	t.Run("find member by id", func(t *testing.T) {
+		unknown := data.findMemberByID(1)
+		assert.Nil(t, unknown)
+
+		member1 := data.findMemberByID(1001)
+		want1 := &Account{
+			ID:        1001,
+			Login:     "test-user",
+			Name:      "Test User",
+			AvatarURL: "https://example.com/avatar2.jpg",
+			HTMLURL:   "https://example.com/html",
+		}
+		assert.Equal(t, want1, member1)
+
+		member2 := data.findMemberByID(1002)
+		want2 := &Account{
+			ID:        1002,
+			Login:     "test-user2",
+			Name:      "Other User",
+			AvatarURL: "https://example.com/avatar3.jpg",
+			HTMLURL:   "https://example.com/htmlpage",
+		}
+		assert.Equal(t, want2, member2)
+	})
 }
 
 func TestGitHubAppData_Errors(t *testing.T) {
@@ -357,7 +468,7 @@ func TestTeamDataFromApp(t *testing.T) {
 
 	t.Run("providing an installation ID queries only the installation", func(t *testing.T) {
 		// Provides Installation 1
-		data, err := teamDataFromApp(context.TODO(), 123456, testPEM, 1, ts.URL)
+		data, err := getDataForApp(context.TODO(), 123456, testPEM, 1, ts.URL)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -374,10 +485,12 @@ func TestTeamDataFromApp(t *testing.T) {
 					teams: map[string]orgTeam{
 						"example-team": {
 							gitHubObject: gitHubObject{
-								id: 12,
+								id:        12,
+								htmlURL:   "https://example.com/org/example-org-1/team/example-team",
+								login:     "example-team",
+								name:      "Example Team",
+								avatarURL: "https://example.com/avatar.jpg",
 							},
-							htmlURL: "https://example.com/org/example-org-1/team/example-team",
-							slug:    "example-team",
 							members: []string{"test-user"},
 						},
 					},
@@ -410,7 +523,7 @@ func TestTeamDataFromApp(t *testing.T) {
 			},
 		}
 
-		teams := data.TeamsForUser("test-user")
+		teams := data.listTeamsForUser("test-user")
 		slices.SortFunc(teams, func(a, b Account) int {
 			return strings.Compare(a.HTMLURL, b.HTMLURL)
 		})
@@ -419,7 +532,7 @@ func TestTeamDataFromApp(t *testing.T) {
 	})
 
 	t.Run("not providing an installation ID gets all installations", func(t *testing.T) {
-		data, err := teamDataFromApp(context.TODO(), 123456, testPEM, 0, ts.URL)
+		data, err := getDataForApp(context.TODO(), 123456, testPEM, 0, ts.URL)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -436,10 +549,12 @@ func TestTeamDataFromApp(t *testing.T) {
 					teams: map[string]orgTeam{
 						"example-team": {
 							gitHubObject: gitHubObject{
-								id: 12,
+								id:        12,
+								login:     "example-team",
+								name:      "Example Team",
+								avatarURL: "https://example.com/avatar.jpg",
+								htmlURL:   "https://example.com/org/example-org-1/team/example-team",
 							},
-							htmlURL: "https://example.com/org/example-org-1/team/example-team",
-							slug:    "example-team",
 							members: []string{"test-user"},
 						},
 					},
@@ -454,10 +569,12 @@ func TestTeamDataFromApp(t *testing.T) {
 					teams: map[string]orgTeam{
 						"example-team": {
 							gitHubObject: gitHubObject{
-								id: 12,
+								id:        12,
+								htmlURL:   "https://example.com/org/example-org-2/team/example-team",
+								avatarURL: "https://example.com/avatar.jpg",
+								name:      "Example Team",
+								login:     "example-team",
 							},
-							htmlURL: "https://example.com/org/example-org-2/team/example-team",
-							slug:    "example-team",
 							members: []string{"test-user"},
 						},
 					},
@@ -498,7 +615,7 @@ func TestTeamDataFromApp(t *testing.T) {
 			},
 		}
 
-		teams := data.TeamsForUser("test-user")
+		teams := data.listTeamsForUser("test-user")
 		slices.SortFunc(teams, func(a, b Account) int {
 			return strings.Compare(a.HTMLURL, b.HTMLURL)
 		})
