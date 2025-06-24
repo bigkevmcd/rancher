@@ -739,6 +739,7 @@ func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter,
 		{
 			"login":               "octocat",
 			"id":                  1,
+			"name":                "octocat",
 			"node_id":             "MDQ6VXNlcjE=",
 			"avatar_url":          "https://github.com/images/error/octocat_happy.gif",
 			"gravatar_id":         "",
