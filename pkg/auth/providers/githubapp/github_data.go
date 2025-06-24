@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation"
@@ -13,154 +14,228 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// GitHubObject represents the basic values that all GitHub resources have.
-type GitHubObject struct {
-	Name      string
-	Login     string
-	AvatarURL string
-	ID        int
+// gitHubObject represents the basic values that all GitHub resources have.
+type gitHubObject struct {
+	name      string
+	login     string
+	avatarURL string
+	htmlURL   string
+	id        int
 }
 
-// Org represents an Organization.
-type Org struct {
-	GitHubObject
+// org represents an Organization.
+type org struct {
+	gitHubObject
 
 	// Teams is a mapping "slug" -> OrgTeam
-	Teams map[string]OrgTeam
+	teams map[string]orgTeam
 }
 
-// OrgTeam represents a team within an Organization.
-type OrgTeam struct {
-	GitHubObject
+// orgTeam represents a team within an Organization.
+type orgTeam struct {
+	gitHubObject
 
-	OrgLogin string
-	HTMLURL  string
-	Slug     string
-	Members  []string
+	members []string
+}
+
+type member struct {
+	gitHubObject
+	// Mapping of org -> teams
+	orgs map[string][]string
+}
+
+func (m member) toAccount() Account {
+	return Account{Name: m.name, Login: m.login, AvatarURL: m.avatarURL, ID: m.id, HTMLURL: m.htmlURL}
 }
 
 // Add a team to this Organization.
-func (o *Org) AddTeam(id int, slug, htmlURL string) {
-	_, ok := o.Teams[slug]
+func (o *org) addTeam(id int, login, name, avatarURL, htmlURL string) {
+	_, ok := o.teams[login]
 	if ok {
 		return
 	}
-	o.Teams[slug] = OrgTeam{GitHubObject: GitHubObject{ID: id}, Members: []string{}, Slug: slug, HTMLURL: htmlURL}
+	o.teams[login] = orgTeam{
+		gitHubObject: gitHubObject{
+			id:        id,
+			htmlURL:   htmlURL,
+			avatarURL: avatarURL,
+			name:      name,
+			login:     login,
+		},
+		members: []string{},
+	}
 }
 
 // Add a member to a team within this Organization.
-func (o *Org) AddTeamMember(teamName, name string) {
-	team, ok := o.Teams[teamName]
+func (o *org) addTeamMember(teamName, name string) {
+	team, ok := o.teams[teamName]
 	if !ok {
 		return
 	}
-	team.Members = append(team.Members, name)
-	o.Teams[teamName] = team
+	team.members = append(team.members, name)
+	o.teams[teamName] = team
 }
 
 // Aggregates the data for members.
-type GitHubAppData struct {
+type gitHubAppData struct {
 	// Orgs is a mapping "name" -> *Org
-	Orgs map[string]*Org
+	orgs map[string]*org
 	// Members is a mapping "membername" -> org -> teams (slice of strings)
-	Members map[string]map[string][]string
+	members map[string]member
 }
 
-// OrgsForUser returns a set of Accounts derived from the Organizations the
+// listOrgsForUser returns a set of Accounts derived from the Organizations the
 // provided username is a member of.
-func (g *GitHubAppData) OrgsForUser(username string) []Account {
+func (g *gitHubAppData) listOrgsForUser(username string) []Account {
 	var accounts []Account
-
-	for orgName := range g.Members[username] {
-		org := g.Orgs[orgName]
-		accounts = append(accounts, Account{Name: org.Name, Login: org.Login, AvatarURL: org.AvatarURL, ID: org.ID})
+	for orgName := range g.members[username].orgs {
+		org := g.orgs[orgName]
+		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id})
 	}
 
 	return accounts
 }
 
-// ListOrgs returns a set of Accounts derived from all Organizations queried
+// listOrgs returns a set of Accounts derived from all Organizations queried
 // with the GitHub App credentials.
-func (g *GitHubAppData) ListOrgs() []Account {
+func (g *gitHubAppData) listOrgs() []Account {
 	var accounts []Account
 
-	for _, org := range g.Orgs {
-		accounts = append(accounts, Account{Name: org.Name, Login: org.Login, AvatarURL: org.AvatarURL, ID: org.ID})
+	for _, org := range g.orgs {
+		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id})
 	}
 
 	return accounts
 }
 
-// TeamsForUser returns a set of Accounts derived from the Teams the provided
+// listTeamsForUser returns a set of Accounts derived from the Teams the provided
 // username is a member of.
-func (g *GitHubAppData) TeamsForUser(username string) []Account {
+func (g *gitHubAppData) listTeamsForUser(username string) []Account {
 	var accounts []Account
 
-	for orgName := range g.Members[username] {
-		org := g.Orgs[orgName]
-		for teamName, team := range org.Teams {
-			accounts = append(accounts, Account{Name: teamName, Login: team.Slug, AvatarURL: org.AvatarURL, ID: team.ID, HTMLURL: team.HTMLURL})
+	for orgName := range g.members[username].orgs {
+		org := g.orgs[orgName]
+		for teamName, team := range org.teams {
+			accounts = append(accounts, Account{Name: teamName, Login: team.login, AvatarURL: org.avatarURL, ID: team.id, HTMLURL: team.htmlURL})
 		}
 	}
 
 	return accounts
 }
 
-// ListTeams returns a set of Accounts derived from all Organizations queried
+// listTeams returns a set of Accounts derived from all Organizations queried
 // with the GitHub App credentials.
-func (g *GitHubAppData) ListTeams() []Account {
+func (g *gitHubAppData) listTeams() []Account {
 	var accounts []Account
-	for _, org := range g.Orgs {
-		for teamName, team := range org.Teams {
-			accounts = append(accounts, Account{Name: teamName, Login: team.Slug, AvatarURL: org.AvatarURL, ID: team.ID, HTMLURL: team.HTMLURL})
+	for _, org := range g.orgs {
+		for teamName, team := range org.teams {
+			accounts = append(accounts, Account{Name: teamName, Login: team.login, AvatarURL: org.avatarURL, ID: team.id, HTMLURL: team.htmlURL})
 		}
 	}
 
 	return accounts
 }
 
-func (g *GitHubAppData) AddOrg(id int, login, name, avatarURL string) {
-	if _, ok := g.Orgs[login]; ok {
-		return
+// searchMembers returns a set of Accounts derived from all members with a
+// simple string match.
+func (g *gitHubAppData) searchMembers(s string) []Account {
+	var accounts []Account
+	for memberLogin, member := range g.members {
+		// TODO: What should this match on?
+		if strings.HasPrefix(memberLogin, s) {
+			accounts = append(accounts, member.toAccount())
+		}
 	}
-	g.Orgs[login] = &Org{GitHubObject: GitHubObject{Login: login, ID: id, Name: name, AvatarURL: avatarURL}, Teams: map[string]OrgTeam{}}
+
+	return accounts
 }
 
-func (g *GitHubAppData) AddTeamToOrg(org string, id int, slug, htmlURL string) {
-	o, ok := g.Orgs[org]
-	if !ok {
-		return
+// searchTeams returns a set of Accounts derived from all teams with a
+// simple string match.
+func (g *gitHubAppData) searchTeams(s string) []Account {
+	var accounts []Account
+
+	for _, org := range g.orgs {
+		for _, team := range org.teams {
+			// TODO: What should this match on?
+			if strings.HasPrefix(team.login, s) {
+				accounts = append(accounts, Account{Name: team.name, Login: team.login, AvatarURL: org.avatarURL, ID: team.id, HTMLURL: team.htmlURL})
+			}
+		}
 	}
 
-	o.AddTeam(id, slug, htmlURL)
+	return accounts
 }
 
-func (g *GitHubAppData) AddMemberToTeamInOrg(org, team, member string) {
-	o, ok := g.Orgs[org]
+// searchOrgs returns a set of Accounts derived from all orgs with a
+// simple string match.
+func (g *gitHubAppData) searchOrgs(s string) []Account {
+	var accounts []Account
+
+	for orgName, org := range g.orgs {
+		// TODO: What should this match on?
+		if strings.HasPrefix(orgName, s) {
+			accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id, HTMLURL: org.htmlURL})
+		}
+	}
+
+	return accounts
+}
+
+func (g *gitHubAppData) addOrg(id int, login, name, avatarURL string) {
+	if _, ok := g.orgs[login]; ok {
+		return
+	}
+	g.orgs[login] = &org{gitHubObject: gitHubObject{login: login, id: id, name: name, avatarURL: avatarURL}, teams: map[string]orgTeam{}}
+}
+
+func (g *gitHubAppData) addTeamToOrg(org string, id int, slug, name, avatarURL, htmlURL string) {
+	o, ok := g.orgs[org]
 	if !ok {
 		return
 	}
-	o.AddTeamMember(team, member)
 
-	m, ok := g.Members[member]
+	o.addTeam(id, slug, name, avatarURL, htmlURL)
+}
+
+func (g *gitHubAppData) addMemberToTeamInOrg(org, team string, id int, login, name, avatarURL, htmlURL string) {
+	o, ok := g.orgs[org]
 	if !ok {
-		m = map[string][]string{}
+		return
+	}
+	o.addTeamMember(team, login)
+
+	m, ok := g.members[login]
+	if !ok {
+		m = member{
+			gitHubObject: gitHubObject{id: id, name: name, login: login, avatarURL: avatarURL, htmlURL: htmlURL},
+			orgs:         map[string][]string{}}
 	}
 
-	orgTeams, ok := m[org]
+	orgTeams, ok := m.orgs[org]
 	if !ok {
 		orgTeams = []string{}
 	}
 	orgTeams = append(orgTeams, team)
-	m[org] = orgTeams
+	m.orgs[org] = orgTeams
 
-	g.Members[member] = m
+	g.members[login] = m
 }
 
-func newGitHubAppData() *GitHubAppData {
-	return &GitHubAppData{
-		Orgs:    map[string]*Org{},
-		Members: map[string]map[string][]string{},
+func (g *gitHubAppData) findMemberByID(memberID int) *Account {
+	for _, member := range g.members {
+		if member.id == memberID {
+			acct := member.toAccount()
+			return &acct
+		}
+	}
+	return nil
+}
+
+func newGitHubAppData() *gitHubAppData {
+	return &gitHubAppData{
+		orgs:    map[string]*org{},
+		members: map[string]member{},
 	}
 }
 
@@ -222,7 +297,7 @@ func createJWT(appID int64, privateKey []byte) string {
 	return ss
 }
 
-func gatherDataForInstallation(ctx context.Context, data *GitHubAppData, installationClient *github.Client, organization int64) error {
+func gatherDataForInstallation(ctx context.Context, data *gitHubAppData, installationClient *github.Client, organization int64) error {
 	org, _, err := installationClient.Organizations.GetByID(ctx, organization)
 	if err != nil {
 		return fmt.Errorf("getting GitHub organization %v: %w", organization, err)
@@ -235,7 +310,7 @@ func gatherDataForInstallation(ctx context.Context, data *GitHubAppData, install
 		return *s
 	}
 
-	data.AddOrg(int(*org.ID), *org.Login, optionalString(org.Name), *org.AvatarURL)
+	data.addOrg(int(*org.ID), *org.Login, optionalString(org.Name), *org.AvatarURL)
 
 	opts := &github.ListOptions{PerPage: 100}
 	var allTeams []*github.Team
@@ -252,8 +327,7 @@ func gatherDataForInstallation(ctx context.Context, data *GitHubAppData, install
 	}
 
 	for _, team := range allTeams {
-		data.AddTeamToOrg(*org.Login, int(*team.ID), *team.Slug, *team.HTMLURL)
-
+		data.addTeamToOrg(*org.Login, int(*team.ID), *team.Slug, *team.Name, *org.AvatarURL, *team.HTMLURL)
 		membersOpts := &github.TeamListTeamMembersOptions{ListOptions: github.ListOptions{PerPage: 100}}
 		var allMembers []*github.User
 		for {
@@ -269,7 +343,12 @@ func gatherDataForInstallation(ctx context.Context, data *GitHubAppData, install
 		}
 
 		for _, member := range allMembers {
-			data.AddMemberToTeamInOrg(*org.Login, *team.Slug, *member.Login)
+			name := ""
+			if member.Name != nil {
+				name = *member.Name
+			}
+
+			data.addMemberToTeamInOrg(*org.Login, *team.Slug, int(*member.ID), *member.Login, name, *member.AvatarURL, *member.HTMLURL)
 		}
 	}
 
@@ -281,7 +360,7 @@ func gatherDataForInstallation(ctx context.Context, data *GitHubAppData, install
 //
 // If the installationID is zero (0) all installations for the app will be
 // queried.
-func teamDataFromApp(ctx context.Context, appID int64, privateKey []byte, installationID int64, endpoint string) (*GitHubAppData, error) {
+func getDataForApp(ctx context.Context, appID int64, privateKey []byte, installationID int64, endpoint string) (*gitHubAppData, error) {
 	data := newGitHubAppData()
 	itr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, privateKey)
 	if err != nil {

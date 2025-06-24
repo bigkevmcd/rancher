@@ -1,9 +1,15 @@
 package githubapp
 
 import (
+	"cmp"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
@@ -64,7 +70,7 @@ func TestGithubAppClientGetUser(t *testing.T) {
 	assert.Equal(t, want, account)
 }
 
-func TestGithubAppClientGetOrgs(t *testing.T) {
+func TestGithubAppClientGetOrgsForUser(t *testing.T) {
 	privateKey := newTestCertificate(t)
 	srv := httptest.NewServer(newFakeGitHubServer(t,
 		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
@@ -80,7 +86,7 @@ func TestGithubAppClientGetOrgs(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getOrgs(cfg)
+	orgs, err := appClient.getOrgsForUser("example", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,19 +95,22 @@ func TestGithubAppClientGetOrgs(t *testing.T) {
 			ID:        1,
 			Login:     "example-org-1",
 			Name:      "Example Org 1",
-			AvatarURL: "https://example.com/avatar.jpg",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
 		},
 		{
 			ID:        2,
 			Login:     "example-org-2",
 			Name:      "Example Org 2",
-			AvatarURL: "https://example.com/avatar.jpg",
+			AvatarURL: "https://example.com/example-org-2-avatar.jpg",
 		},
 	}
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return strings.Compare(a.Login, b.Login)
+	})
 	assert.Equal(t, want, orgs)
 }
 
-func TestGithubAppClientGetOrgsNotProvidingInstallationID(t *testing.T) {
+func TestGithubAppClientGetOrgsForUserNotProvidingInstallationID(t *testing.T) {
 	cert := newTestCertificate(t)
 	srv := httptest.NewServer(newFakeGitHubServer(t,
 		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
@@ -116,7 +125,11 @@ func TestGithubAppClientGetOrgsNotProvidingInstallationID(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getOrgs(cfg)
+	orgs, err := appClient.getOrgsForUser("example", cfg)
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return strings.Compare(a.Login, b.Login)
+	})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,19 +138,19 @@ func TestGithubAppClientGetOrgsNotProvidingInstallationID(t *testing.T) {
 			ID:        1,
 			Login:     "example-org-1",
 			Name:      "Example Org 1",
-			AvatarURL: "https://example.com/avatar.jpg",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
 		},
 		{
 			ID:        2,
 			Login:     "example-org-2",
 			Name:      "Example Org 2",
-			AvatarURL: "https://example.com/avatar.jpg",
+			AvatarURL: "https://example.com/example-org-2-avatar.jpg",
 		},
 	}
 	assert.Equal(t, want, orgs)
 }
 
-func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
+func TestGithubAppClientGetOrgsForUserProvidingInstallationID(t *testing.T) {
 	cert := newTestCertificate(t)
 	srv := httptest.NewServer(newFakeGitHubServer(t,
 		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
@@ -153,7 +166,7 @@ func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getOrgs(cfg)
+	orgs, err := appClient.getOrgsForUser("example", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +175,7 @@ func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
 			ID:        1,
 			Login:     "example-org-1",
 			Name:      "Example Org 1",
-			AvatarURL: "https://example.com/avatar.jpg",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
 			HTMLURL:   "",
 			Type:      "",
 		},
@@ -170,7 +183,7 @@ func TestGithubAppClientGetOrgsProvidingInstallationID(t *testing.T) {
 	assert.Equal(t, want, orgs)
 }
 
-func TestGithubAppClientGetTeamsNotProvidingInstallationID(t *testing.T) {
+func TestGithubAppClientGetTeamsForUserNotProvidingInstallationID(t *testing.T) {
 	cert := newTestCertificate(t)
 	srv := httptest.NewServer(newFakeGitHubServer(t,
 		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
@@ -185,30 +198,41 @@ func TestGithubAppClientGetTeamsNotProvidingInstallationID(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getTeams(cfg)
+	orgs, err := appClient.getTeamsForUser("octocat", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := []Account{
 		{
 			ID:        1215,
-			Login:     "justice-league",
-			Name:      "justice-league",
-			AvatarURL: "https://example.com/avatar.jpg",
-			HTMLURL:   "https://github.com/orgs/example-org-1-teams/justice-league",
+			Login:     "dev-team",
+			Name:      "dev-team",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-1/dev-team",
 		},
 		{
 			ID:        1216,
-			Login:     "justice-league",
-			Name:      "justice-league",
-			AvatarURL: "https://example.com/avatar.jpg",
-			HTMLURL:   "https://github.com/orgs/example-org-2-teams/justice-league",
+			Login:     "dev-team",
+			Name:      "dev-team",
+			AvatarURL: "https://example.com/example-org-2-avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-2/dev-team",
+		},
+		{
+			ID:        1217,
+			Login:     "test-team",
+			Name:      "test-team",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-1/test-team",
 		},
 	}
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	assert.Equal(t, want, orgs)
 }
 
-func TestGithubAppClientSearchUsersWithInstallationID(t *testing.T) {
+func TestGithubAppClientGetTeamsForUserProvidingInstallationID(t *testing.T) {
 	cert := newTestCertificate(t)
 	srv := httptest.NewServer(newFakeGitHubServer(t,
 		withTestCode("test_client_id", "1234567", "http://localhost:3000/callback", "testing"),
@@ -219,40 +243,36 @@ func TestGithubAppClientSearchUsersWithInstallationID(t *testing.T) {
 		ClientID:       "test_client_id",
 		ClientSecret:   "test_client_secret",
 		AppID:          "1234567",
-		PrivateKey:     string(cert),
 		InstallationID: "1",
+		PrivateKey:     string(cert),
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.searchUsers("octo", "", cfg)
+	orgs, err := appClient.getTeamsForUser("octocat", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := []Account{
 		{
-			ID:        1,
-			Login:     "octocat",
-			Name:      "monalisa octocat",
-			AvatarURL: "https://github.com/images/error/octocat_happy.gif",
-			HTMLURL:   "https://github.com/octocat",
-			Type:      "User",
+			ID:        1215,
+			Login:     "dev-team",
+			Name:      "dev-team",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-1/dev-team",
+		},
+		{
+			ID:        1217,
+			Login:     "test-team",
+			Name:      "test-team",
+			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
+			HTMLURL:   "https://github.com/orgs/example-org-1/test-team",
 		},
 	}
+	slices.SortFunc(orgs, func(a, b Account) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	assert.Equal(t, want, orgs)
-
-	// 	t.Fatal(err)
-	// }
-	// want := []Account{
-	// 	{
-	// 		ID:        1,
-	// 		Login:     "octocat",
-	// 		Name:      "monalisa octocat",
-	// 		AvatarURL: "https://github.com/images/error/octocat_happy.gif",
-	// 		HTMLURL:   "https://github.com/octocat",
-	// 		Type:      "User",
-	// 	},
-	// }
-	// assert.Equal(t, want, orgs)
 }
 
 func stripScheme(t *testing.T, ts *httptest.Server) string {
@@ -274,5 +294,41 @@ func newOAuthConf(url string) *oauth2.Config {
 			AuthURL:  url + "/auth",
 			TokenURL: url + "/token",
 		},
+	}
+}
+
+// This will communicate with GitHub using the provided credentials.
+// And verify that the APIs calls are correct.
+func TestGitHubAppClient(t *testing.T) {
+	privateKey := []byte(os.Getenv("GITHUB_APP_KEY"))
+	if len(privateKey) == 0 {
+		t.Skip("No GITHUB_APP_KEY provided")
+	}
+	app := os.Getenv("GITHUB_APP_ID")
+	appID, err := strconv.ParseInt(app, 10, 64)
+	if err != nil {
+		t.Fatalf("invalid app ID: %q", app)
+	}
+
+	var installationID int64
+	if v := os.Getenv("GITHUB_INSTALLATION_ID"); v != "" {
+		i, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			t.Fatalf("invalid installation id %q", v)
+		}
+		installationID = i
+	}
+
+	data, err := getDataForApp(context.Background(), appID, privateKey, installationID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(data.members) == 0 {
+		t.Errorf("did not get any members")
+	}
+
+	if len(data.orgs) == 0 {
+		t.Errorf("did not get any orgs")
 	}
 }

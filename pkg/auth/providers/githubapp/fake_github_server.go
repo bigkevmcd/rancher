@@ -1,3 +1,4 @@
+// +build: test
 package githubapp
 
 import (
@@ -94,6 +95,8 @@ func withPrivateKey(clientID string, pemData []byte) func(*fakeGitHubServer) {
 	}
 }
 
+// This is a fake GitHub server - its primary use is validating the various
+// tokens that we need to send.
 func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGitHubServer {
 	mux := http.NewServeMux()
 
@@ -117,7 +120,7 @@ func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGit
 				Login:     "example-org-1",
 				ID:        1,
 				Type:      "Organization",
-				AvatarURL: "https://example.com/avatar.jpg",
+				AvatarURL: "https://example.com/example-org-1-avatar.jpg",
 				Name:      "Example Org 1",
 				teams: map[string]fakeTeam{
 					"1215": {
@@ -127,13 +130,20 @@ func newFakeGitHubServer(t *testing.T, opts ...func(*fakeGitHubServer)) *fakeGit
 						Name:    "Dev Team",
 						Slug:    "dev-team",
 					},
+					"1217": {
+						ID:      1217,
+						URL:     "https://api.github.com/teams/1217",
+						HTMLURL: "https://github.com/orgs/example-org-1/test-team",
+						Name:    "Test Team",
+						Slug:    "test-team",
+					},
 				},
 			},
 			"2": {
 				Login:     "example-org-2",
 				ID:        2,
 				Type:      "Organization",
-				AvatarURL: "https://example.com/avatar.jpg",
+				AvatarURL: "https://example.com/example-org-2-avatar.jpg",
 				Name:      "Example Org 2",
 				teams: map[string]fakeTeam{
 					"1216": {
@@ -732,16 +742,13 @@ func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter,
 		return
 	}
 
-	// organizationID := r.PathValue("organizationID")
-	// teamID := r.PathValue("teamID")
-
 	marshalJSON(s.t, w, []map[string]any{
 		{
 			"login":               "octocat",
 			"id":                  1,
+			"name":                "octocat",
 			"node_id":             "MDQ6VXNlcjE=",
 			"avatar_url":          "https://github.com/images/error/octocat_happy.gif",
-			"gravatar_id":         "",
 			"url":                 "https://api.github.com/users/octocat",
 			"html_url":            "https://github.com/octocat",
 			"followers_url":       "https://api.github.com/users/octocat/followers",
@@ -756,13 +763,24 @@ func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter,
 			"type":                "User",
 			"site_admin":          false,
 		},
+		{
+			"login":               "example",
+			"id":                  2,
+			"name":                "example",
+			"avatar_url":          "https://github.com/images/error/example_happy.gif",
+			"url":                 "https://api.github.com/users/example",
+			"html_url":            "https://github.com/example",
+			"followers_url":       "https://api.github.com/users/example/followers",
+			"following_url":       "https://api.github.com/users/example/following{/other_user}",
+			"gists_url":           "https://api.github.com/users/example/gists{/gist_id}",
+			"starred_url":         "https://api.github.com/users/example/starred{/owner}{/repo}",
+			"subscriptions_url":   "https://api.github.com/users/example/subscriptions",
+			"organizations_url":   "https://api.github.com/users/example/orgs",
+			"repos_url":           "https://api.github.com/users/example/repos",
+			"events_url":          "https://api.github.com/users/example/events{/privacy}",
+			"received_events_url": "https://api.github.com/users/example/received_events",
+			"type":                "User",
+			"site_admin":          false,
+		},
 	})
-}
-
-func sumString(s string) int64 {
-	var sum int64 = 0
-	for _, char := range s {
-		sum += int64(char)
-	}
-	return sum
 }
