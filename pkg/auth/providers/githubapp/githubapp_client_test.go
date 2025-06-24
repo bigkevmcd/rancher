@@ -2,10 +2,14 @@ package githubapp
 
 import (
 	"cmp"
+	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -240,5 +244,39 @@ func newOAuthConf(url string) *oauth2.Config {
 			AuthURL:  url + "/auth",
 			TokenURL: url + "/token",
 		},
+	}
+}
+
+func TestGitHubAppClient(t *testing.T) {
+	privateKey := []byte(os.Getenv("GITHUB_APP_KEY"))
+	if privateKey == nil {
+		t.Skip("No GITHUB_APP_KEY provided")
+	}
+	app := os.Getenv("GITHUB_APP_ID")
+	appID, err := strconv.ParseInt(app, 10, 64)
+	if err != nil {
+		log.Fatalf("invalid app ID: %q", app)
+	}
+
+	var installationID int64
+	if v := os.Getenv("GITHUB_INSTALLATION_ID"); v != "" {
+		i, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			log.Fatalf("invalid installation id %q", v)
+		}
+		installationID = i
+	}
+
+	data, err := getDataWithAppFromApp(context.Background(), appID, privateKey, installationID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(data.members) == 0 {
+		t.Errorf("did not get any members")
+	}
+
+	if len(data.orgs) == 0 {
+		t.Errorf("did not get any orgs")
 	}
 }
