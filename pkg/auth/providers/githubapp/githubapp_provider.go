@@ -249,9 +249,13 @@ func (g *ghAppProvider) SearchPrincipals(searchKey, principalType string, token 
 	if err != nil {
 		return nil, err
 	}
+
 	for _, acct := range users {
-		p := g.toPrincipal(userType, acct, token)
-		principals = append(principals, p)
+		pType := strings.ToLower(acct.Type)
+		if pType == "organization" {
+			pType = orgType
+		}
+		principals = append(principals, g.toPrincipal(pType, acct, token))
 	}
 
 	if principalType == "" || principalType == "group" {
