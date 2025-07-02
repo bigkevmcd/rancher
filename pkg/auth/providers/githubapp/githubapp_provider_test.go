@@ -408,12 +408,78 @@ func TestSearchPrincipals(t *testing.T) {
 				},
 			},
 		},
+		"searching for teams": {
+			"dev",
+			"group",
+			[]v3.Principal{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_team://1215",
+					},
+					DisplayName:    "Dev Team",
+					LoginName:      "dev-team",
+					ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+					PrincipalType:  "group", MemberOf: false,
+					Provider: "githubapp",
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_team://1216",
+					},
+					DisplayName:    "Dev Team",
+					LoginName:      "dev-team",
+					ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+					PrincipalType:  "group",
+					Provider:       "githubapp",
+				},
+			},
+		},
+		"searching includes org and user": {
+			"example",
+			"user",
+			[]v3.Principal{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_org://1",
+					},
+					DisplayName:    "Example Org 1",
+					LoginName:      "example-org-1",
+					ProfilePicture: "https://example.com/example-org-1-avatar.jpg",
+					PrincipalType:  "group",
+					Provider:       "githubapp",
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_org://2",
+					},
+					DisplayName:    "Example Org 2",
+					LoginName:      "example-org-2",
+					ProfilePicture: "https://example.com/example-org-2-avatar.jpg",
+					PrincipalType:  "group",
+					Provider:       "githubapp",
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "githubapp_user://2",
+					},
+					DisplayName:    "example",
+					LoginName:      "example",
+					ProfilePicture: "https://github.com/images/error/example_happy.gif",
+					PrincipalType:  "user",
+					Provider:       "githubapp",
+				},
+			},
+		},
 	}
 
 	for name, tt := range searchTests {
 		t.Run(name, func(t *testing.T) {
 			accts, err := provider.SearchPrincipals(tt.key, tt.principalType, nil)
 			require.NoError(t, err)
+
+			slices.SortFunc(accts, func(a, b v3.Principal) int {
+				return strings.Compare(a.ObjectMeta.Name, a.ObjectMeta.Name)
+			})
 
 			assert.Equal(t, tt.want, accts)
 		})

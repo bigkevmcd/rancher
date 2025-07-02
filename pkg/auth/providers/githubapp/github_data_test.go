@@ -148,6 +148,7 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        1234567,
 				Name:      "Example Org",
 				AvatarURL: "https://example.com/avatar1.jpg",
+				Type:      "Organization",
 			},
 			{
 
@@ -155,6 +156,7 @@ func TestGitHubAppData(t *testing.T) {
 				Login:     "other-org",
 				Name:      "Other Org",
 				AvatarURL: "https://example.com/avatar2.jpg",
+				Type:      "Organization",
 			},
 		}
 
@@ -170,6 +172,7 @@ func TestGitHubAppData(t *testing.T) {
 				Login:     "other-org",
 				Name:      "Other Org",
 				AvatarURL: "https://example.com/avatar2.jpg",
+				Type:      "Organization",
 			},
 		}
 
@@ -187,12 +190,14 @@ func TestGitHubAppData(t *testing.T) {
 				ID:        1234567,
 				Name:      "Example Org",
 				AvatarURL: "https://example.com/avatar1.jpg",
+				Type:      "Organization",
 			},
 			{
 				ID:        3456789,
 				Login:     "example2",
 				Name:      "Example Org 2",
 				AvatarURL: "https://example.com/avatar2.jpg",
+				Type:      "Organization",
 			},
 			{
 
@@ -200,6 +205,7 @@ func TestGitHubAppData(t *testing.T) {
 				Login:     "other-org",
 				Name:      "Other Org",
 				AvatarURL: "https://example.com/avatar2.jpg",
+				Type:      "Organization",
 			},
 		}
 		orgs := data.listOrgs()
@@ -320,6 +326,7 @@ func TestGitHubAppData(t *testing.T) {
 				Name:      "Other User",
 				AvatarURL: "https://example.com/avatar3.jpg",
 				HTMLURL:   "https://example.com/htmlpage",
+				Type:      "User",
 			},
 		}
 
@@ -336,6 +343,7 @@ func TestGitHubAppData(t *testing.T) {
 				Name:      "Test User",
 				AvatarURL: "https://example.com/avatar2.jpg",
 				HTMLURL:   "https://example.com/html",
+				Type:      "User",
 			},
 			{
 				ID:        1002,
@@ -343,6 +351,7 @@ func TestGitHubAppData(t *testing.T) {
 				Name:      "Other User",
 				AvatarURL: "https://example.com/avatar3.jpg",
 				HTMLURL:   "https://example.com/htmlpage",
+				Type:      "User",
 			},
 		}
 		members = data.searchMembers("test-user")
@@ -401,6 +410,7 @@ func TestGitHubAppData(t *testing.T) {
 				Login:     "other-org",
 				Name:      "Other Org",
 				AvatarURL: "https://example.com/avatar2.jpg",
+				Type:      "Organization",
 			},
 		}
 		orgs := data.searchOrgs("other")
@@ -415,12 +425,14 @@ func TestGitHubAppData(t *testing.T) {
 				Login:     "example",
 				Name:      "Example Org",
 				AvatarURL: "https://example.com/avatar1.jpg",
+				Type:      "Organization",
 			},
 			{
 				ID:        3456789,
 				Login:     "example2",
 				Name:      "Example Org 2",
 				AvatarURL: "https://example.com/avatar2.jpg",
+				Type:      "Organization",
 			},
 		}
 		orgs = data.searchOrgs("example")
@@ -441,6 +453,7 @@ func TestGitHubAppData(t *testing.T) {
 			Name:      "Test User",
 			AvatarURL: "https://example.com/avatar2.jpg",
 			HTMLURL:   "https://example.com/html",
+			Type:      "User",
 		}
 		assert.Equal(t, want1, member1)
 
@@ -451,6 +464,7 @@ func TestGitHubAppData(t *testing.T) {
 			Name:      "Other User",
 			AvatarURL: "https://example.com/avatar3.jpg",
 			HTMLURL:   "https://example.com/htmlpage",
+			Type:      "User",
 		}
 		assert.Equal(t, want2, member2)
 	})

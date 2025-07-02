@@ -96,12 +96,14 @@ func TestGithubAppClientGetOrgsForUser(t *testing.T) {
 			Login:     "example-org-1",
 			Name:      "Example Org 1",
 			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
+			Type:      "Organization",
 		},
 		{
 			ID:        2,
 			Login:     "example-org-2",
 			Name:      "Example Org 2",
 			AvatarURL: "https://example.com/example-org-2-avatar.jpg",
+			Type:      "Organization",
 		},
 	}
 	slices.SortFunc(orgs, func(a, b Account) int {
@@ -139,12 +141,14 @@ func TestGithubAppClientGetOrgsForUserNotProvidingInstallationID(t *testing.T) {
 			Login:     "example-org-1",
 			Name:      "Example Org 1",
 			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
+			Type:      "Organization",
 		},
 		{
 			ID:        2,
 			Login:     "example-org-2",
 			Name:      "Example Org 2",
 			AvatarURL: "https://example.com/example-org-2-avatar.jpg",
+			Type:      "Organization",
 		},
 	}
 	assert.Equal(t, want, orgs)
@@ -176,8 +180,7 @@ func TestGithubAppClientGetOrgsForUserProvidingInstallationID(t *testing.T) {
 			Login:     "example-org-1",
 			Name:      "Example Org 1",
 			AvatarURL: "https://example.com/example-org-1-avatar.jpg",
-			HTMLURL:   "",
-			Type:      "",
+			Type:      "Organization",
 		},
 	}
 	assert.Equal(t, want, orgs)

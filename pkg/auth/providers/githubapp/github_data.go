@@ -45,7 +45,7 @@ type member struct {
 }
 
 func (m member) toAccount() Account {
-	return Account{Name: m.name, Login: m.login, AvatarURL: m.avatarURL, ID: m.id, HTMLURL: m.htmlURL}
+	return Account{Name: m.name, Login: m.login, AvatarURL: m.avatarURL, ID: m.id, HTMLURL: m.htmlURL, Type: "User"}
 }
 
 // Add a team to this Organization.
@@ -90,7 +90,7 @@ func (g *gitHubAppData) listOrgsForUser(username string) []Account {
 	var accounts []Account
 	for orgName := range g.members[username].orgs {
 		org := g.orgs[orgName]
-		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id})
+		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id, Type: "Organization"})
 	}
 
 	return accounts
@@ -102,7 +102,7 @@ func (g *gitHubAppData) listOrgs() []Account {
 	var accounts []Account
 
 	for _, org := range g.orgs {
-		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id})
+		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id, Type: "Organization"})
 	}
 
 	return accounts
@@ -175,7 +175,7 @@ func (g *gitHubAppData) searchOrgs(s string) []Account {
 	for orgName, org := range g.orgs {
 		// TODO: What should this match on?
 		if strings.HasPrefix(orgName, s) {
-			accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id, HTMLURL: org.htmlURL})
+			accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id, HTMLURL: org.htmlURL, Type: "Organization"})
 		}
 	}
 
