@@ -12,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-github/v72/github"
 	"golang.org/x/oauth2"
+	"k8s.io/utils/ptr"
 )
 
 // gitHubObject represents the basic values that all GitHub resources have.
@@ -29,6 +30,10 @@ type org struct {
 
 	// Teams is a mapping "slug" -> OrgTeam
 	teams map[string]orgTeam
+}
+
+func (o org) toAccount() Account {
+	return Account{Name: o.name, Login: o.login, AvatarURL: o.avatarURL, ID: o.id, HTMLURL: o.htmlURL, Type: "Organization"}
 }
 
 // orgTeam represents a team within an Organization.
@@ -90,7 +95,7 @@ func (g *gitHubAppData) listOrgsForUser(username string) []Account {
 	var accounts []Account
 	for orgName := range g.members[username].orgs {
 		org := g.orgs[orgName]
-		accounts = append(accounts, Account{Name: org.name, Login: org.login, AvatarURL: org.avatarURL, ID: org.id, Type: "Organization"})
+		accounts = append(accounts, org.toAccount())
 	}
 
 	return accounts
@@ -232,6 +237,16 @@ func (g *gitHubAppData) findMemberByID(memberID int) *Account {
 	return nil
 }
 
+func (g *gitHubAppData) findOrgByID(orgID int) *Account {
+	for _, org := range g.orgs {
+		if org.id == orgID {
+			acct := org.toAccount()
+			return &acct
+		}
+	}
+	return nil
+}
+
 func newGitHubAppData() *gitHubAppData {
 	return &gitHubAppData{
 		orgs:    map[string]*org{},
@@ -255,7 +270,7 @@ func newGitHubClient(c *http.Client, endpoint string) (*github.Client, error) {
 
 // Create an installation specific token and return a client configured to use the
 // token.
-func newInstallationClient(ctx context.Context, client *github.Client, installationID int64, endpoint string) (*github.Client, error) {
+func newClientForInstallation(ctx context.Context, client *github.Client, installationID int64, endpoint string) (*github.Client, error) {
 	token, _, err := client.Apps.CreateInstallationToken(ctx, installationID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create installation token: %w", err)
@@ -302,15 +317,7 @@ func gatherDataForInstallation(ctx context.Context, data *gitHubAppData, install
 	if err != nil {
 		return fmt.Errorf("getting GitHub organization %v: %w", organization, err)
 	}
-	optionalString := func(s *string) string {
-		if s == nil {
-			return ""
-		}
-
-		return *s
-	}
-
-	data.addOrg(int(*org.ID), *org.Login, optionalString(org.Name), *org.AvatarURL)
+	data.addOrg(int(*org.ID), *org.Login, ptr.Deref(org.Name, ""), *org.AvatarURL)
 
 	opts := &github.ListOptions{PerPage: 100}
 	var allTeams []*github.Team
@@ -361,7 +368,71 @@ func gatherDataForInstallation(ctx context.Context, data *gitHubAppData, install
 // If the installationID is zero (0) all installations for the app will be
 // queried.
 func getDataForApp(ctx context.Context, appID int64, privateKey []byte, installationID int64, endpoint string) (*gitHubAppData, error) {
+	itr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("creating transport to access GitHub: %w", err)
+	}
+
+	client := github.NewClient(
+		&http.Client{
+			Transport: itr,
+			Timeout:   time.Second * 30,
+		},
+	)
+
+	if endpoint != "" {
+		c, err := client.WithEnterpriseURLs(endpoint, endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("creating a github client: %w", err)
+		}
+		client = c
+	}
+
+	appClient, err := newClientForApp(ctx, appID, privateKey, endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("creating a client for app %v: %w", appID, err)
+	}
+
 	data := newGitHubAppData()
+	if installationID > 0 {
+		installation, _, err := client.Apps.GetInstallation(ctx, installationID)
+		if err != nil {
+			log.Fatalf("failed to get installation %v: %s", installationID, err)
+		}
+		installationClient, err := newClientForInstallation(ctx, appClient, installationID, endpoint)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := gatherDataForInstallation(ctx, data, installationClient, *installation.TargetID); err != nil {
+			return nil, err
+		}
+	} else {
+		installations, _, err := client.Apps.ListInstallations(ctx, &github.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("listing app installations: %w", err)
+		}
+
+		for _, i := range installations {
+			installationClient, err := newClientForInstallation(ctx, appClient, *i.ID, endpoint)
+			if err != nil {
+				return nil, err
+			}
+
+			if err := gatherDataForInstallation(ctx, data, installationClient, *i.TargetID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return data, nil
+}
+
+// Get a client for one of the installations available to the app.
+//
+// If the installationID is not zero, this installation will be used, otherwise
+// we'll pick one of the installations for the app.
+func getInstallationClient(ctx context.Context, appID int64, privateKey []byte, installationID int64, endpoint string) (*github.Client, error) {
 	itr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating transport to access GitHub: %w", err)
@@ -388,33 +459,15 @@ func getDataForApp(ctx context.Context, appID int64, privateKey []byte, installa
 	}
 
 	if installationID > 0 {
-		installation, _, err := client.Apps.GetInstallation(ctx, installationID)
-		if err != nil {
-			log.Fatalf("failed to get installation %v: %s", installationID, err)
-		}
-		installationClient, err := newInstallationClient(ctx, appClient, installationID, endpoint)
-		if err != nil {
-			return nil, err
-		}
-		if err := gatherDataForInstallation(ctx, data, installationClient, *installation.TargetID); err != nil {
-			return nil, err
-		}
-	} else {
-		installations, _, err := client.Apps.ListInstallations(ctx, &github.ListOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("listing app installations: %w", err)
-		}
-
-		for _, i := range installations {
-			installationClient, err := newInstallationClient(ctx, appClient, *i.ID, endpoint)
-			if err != nil {
-				return nil, err
-			}
-			if err := gatherDataForInstallation(ctx, data, installationClient, *i.TargetID); err != nil {
-				return nil, err
-			}
-		}
+		return newClientForInstallation(ctx, appClient, installationID, endpoint)
 	}
 
-	return data, nil
+	installations, _, err := client.Apps.ListInstallations(ctx, &github.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing app installations: %w", err)
+	}
+
+	// Should this choose randomly?
+	selectedInstallationID := *installations[0].ID
+	return newClientForInstallation(ctx, appClient, selectedInstallationID, endpoint)
 }

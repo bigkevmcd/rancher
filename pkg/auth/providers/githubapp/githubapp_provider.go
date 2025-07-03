@@ -38,14 +38,14 @@ const (
 )
 
 type githubClient interface {
-	getAccessToken(code string, config *cattlev3.GithubAppConfig) (string, error)
-	getUser(githubAccessToken string, config *cattlev3.GithubAppConfig) (Account, error)
-	getOrgsForUser(username string, config *cattlev3.GithubAppConfig) ([]Account, error)
-	getTeamsForUser(username string, config *cattlev3.GithubAppConfig) ([]Account, error)
-	searchUsers(searchTerm, searchType string, config *cattlev3.GithubAppConfig) ([]Account, error)
-	searchTeams(searchTerm string, config *cattlev3.GithubAppConfig) ([]Account, error)
-	getUserOrgByID(id string, config *cattlev3.GithubAppConfig) (Account, error)
-	getTeamByID(id string, config *cattlev3.GithubAppConfig) (Account, error)
+	getAccessToken(ctx context.Context, code string, config *cattlev3.GithubAppConfig) (string, error)
+	getUser(ctx context.Context, githubAccessToken string, config *cattlev3.GithubAppConfig) (Account, error)
+	getOrgsForUser(ctx context.Context, username string, config *cattlev3.GithubAppConfig) ([]Account, error)
+	getTeamsForUser(ctx context.Context, username string, config *cattlev3.GithubAppConfig) ([]Account, error)
+	searchUsers(ctx context.Context, searchTerm, searchType string, config *cattlev3.GithubAppConfig) ([]Account, error)
+	searchTeams(ctx context.Context, searchTerm string, config *cattlev3.GithubAppConfig) ([]Account, error)
+	getUserOrgByID(ctx context.Context, id int, config *cattlev3.GithubAppConfig) (Account, error)
+	getTeamByID(ctx context.Context, id int, config *cattlev3.GithubAppConfig) (Account, error)
 }
 
 type tokensManager interface {
@@ -137,13 +137,14 @@ func (g *ghAppProvider) LoginUser(host string, githubCredential *cattlev3.Github
 
 	logrus.Info("ghAppProvider.LoginUser")
 
-	accessToken, err := g.githubClient.getAccessToken(securityCode, config)
+	ctx := context.Background()
+	accessToken, err := g.githubClient.getAccessToken(ctx, securityCode, config)
 	if err != nil {
 		logrus.Infof("Error generating accessToken from github %v", err)
 		return v3.Principal{}, nil, "", err
 	}
 
-	user, err := g.githubClient.getUser(accessToken, config)
+	user, err := g.githubClient.getUser(ctx, accessToken, config)
 	if err != nil {
 		return v3.Principal{}, nil, "", err
 	}
@@ -151,7 +152,7 @@ func (g *ghAppProvider) LoginUser(host string, githubCredential *cattlev3.Github
 	userPrincipal.Me = true
 
 	var groupPrincipals []v3.Principal
-	orgAccts, err := g.githubClient.getOrgsForUser(user.Login, config)
+	orgAccts, err := g.githubClient.getOrgsForUser(ctx, user.Login, config)
 	if err != nil {
 		return v3.Principal{}, nil, "", err
 	}
@@ -161,7 +162,7 @@ func (g *ghAppProvider) LoginUser(host string, githubCredential *cattlev3.Github
 		groupPrincipals = append(groupPrincipals, groupPrincipal)
 	}
 
-	teamAccts, err := g.githubClient.getTeamsForUser(user.Login, config)
+	teamAccts, err := g.githubClient.getTeamsForUser(ctx, user.Login, config)
 	if err != nil {
 		return v3.Principal{}, nil, "", err
 	}
@@ -243,9 +244,10 @@ func (g *ghAppProvider) SearchPrincipals(searchKey, principalType string, token 
 	}
 
 	var principals []v3.Principal
+	ctx := context.Background()
 	// TODO: Should this search within the orgs that a user is a member of?
 	// It was discussed that we'd search with the credentials of the app.
-	users, err := g.githubClient.searchUsers(searchKey, principalType, config)
+	users, err := g.githubClient.searchUsers(ctx, searchKey, principalType, config)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +261,7 @@ func (g *ghAppProvider) SearchPrincipals(searchKey, principalType string, token 
 	}
 
 	if principalType == "" || principalType == "group" {
-		teamAccts, err := g.githubClient.searchTeams(searchKey, config)
+		teamAccts, err := g.githubClient.searchTeams(ctx, searchKey, config)
 		if err != nil {
 			return nil, err
 		}
@@ -273,52 +275,29 @@ func (g *ghAppProvider) SearchPrincipals(searchKey, principalType string, token 
 }
 
 func (g *ghAppProvider) GetPrincipal(principalID string, token accessor.TokenAccessor) (v3.Principal, error) {
-	// config, err := g.getConfig()
-	// if err != nil {
-	// 	return v3.Principal{}, err
-	// }
+	config, err := g.getConfig()
+	if err != nil {
+		return v3.Principal{}, err
+	}
+	ctx := context.Background()
 
-	// accessToken, err := g.tokenMGR.GetSecret(token.GetUserID(), token.GetAuthProvider(), []accessor.TokenAccessor{token})
-	// if err != nil {
-	// 	if !apierrors.IsNotFound(err) {
-	// 		return v3.Principal{}, err
-	// 	}
-	// 	accessToken = token.GetProviderInfo()["access_token"]
-	// }
-	// // parsing id to get the external id and type. id looks like github_[user|org|team]://12345
-	// var externalID string
-	// parts := strings.SplitN(principalID, ":", 2)
-	// if len(parts) != 2 {
-	// 	return v3.Principal{}, fmt.Errorf("invalid id %v", principalID)
-	// }
-	// externalID = strings.TrimPrefix(parts[1], "//")
-	// parts = strings.SplitN(parts[0], "_", 2)
-	// if len(parts) != 2 {
-	// 	return v3.Principal{}, fmt.Errorf("invalid id %v", principalID)
-	// }
-
-	// principalType := parts[1]
-	// var acct Account
-	// switch principalType {
-	// case userType, orgType:
-	// 	acct, err = g.githubClient.getUserOrgByID(externalID, accessToken, config)
-	// 	if err != nil {
-	// 		return v3.Principal{}, err
-	// 	}
-	// case teamType:
-	// 	acct, err = g.githubClient.getTeamByID(externalID, accessToken, config)
-	// 	if err != nil {
-	// 		return v3.Principal{}, err
-	// 	}
-	// default:
-	// 	return v3.Principal{}, fmt.Errorf("cannot get the github account due to invalid externalIDType %v", principalType)
-	// }
-
-	// princ := g.toPrincipal(principalType, acct, token)
-
-	princ := v3.Principal{}
-
-	return princ, nil
+	principalType, externalID, err := parsePrincipalID(principalID)
+	switch principalType {
+	case userType, orgType:
+		acct, err := g.githubClient.getUserOrgByID(ctx, externalID, config)
+		if err != nil {
+			return v3.Principal{}, err
+		}
+		return g.toPrincipal(principalType, acct, token), nil
+	case teamType:
+		acct, err := g.githubClient.getTeamByID(ctx, externalID, config)
+		if err != nil {
+			return v3.Principal{}, err
+		}
+		return g.toPrincipal(principalType, acct, token), nil
+	default:
+		return v3.Principal{}, fmt.Errorf("cannot get the github account due to invalid externalID Type %v", principalType)
+	}
 }
 
 func (g *ghAppProvider) toPrincipal(principalType string, acct Account, token accessor.TokenAccessor) v3.Principal {
