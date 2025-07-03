@@ -12,8 +12,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-github/v72/github"
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
 
@@ -23,7 +25,7 @@ func TestGithubAppClientGetAccessToken(t *testing.T) {
 	defer srv.Close()
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	token, err := appClient.getAccessToken("1234567", &mgmtv3.GithubAppConfig{
+	token, err := appClient.getAccessToken(context.Background(), "1234567", &mgmtv3.GithubAppConfig{
 		Hostname:     stripScheme(t, srv),
 		ClientID:     "test_client_id",
 		ClientSecret: "test_client_secret",
@@ -49,17 +51,17 @@ func TestGithubAppClientGetUser(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	token, err := appClient.getAccessToken("1234567", cfg)
+	token, err := appClient.getAccessToken(context.Background(), "1234567", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	account, err := appClient.getUser(token, cfg)
+	account, err := appClient.getUser(context.Background(), token, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	want := Account{
-		ID:        1,
+		ID:        1234,
 		Login:     "octocat",
 		Name:      "monalisa octocat",
 		AvatarURL: "https://github.com/images/error/octocat_happy.gif",
@@ -86,7 +88,7 @@ func TestGithubAppClientGetOrgsForUser(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getOrgsForUser("example", cfg)
+	orgs, err := appClient.getOrgsForUser(context.Background(), "example", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,14 +129,12 @@ func TestGithubAppClientGetOrgsForUserNotProvidingInstallationID(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getOrgsForUser("example", cfg)
+	orgs, err := appClient.getOrgsForUser(context.Background(), "example", cfg)
 	slices.SortFunc(orgs, func(a, b Account) int {
 		return strings.Compare(a.Login, b.Login)
 	})
+	require.NoError(t, err)
 
-	if err != nil {
-		t.Fatal(err)
-	}
 	want := []Account{
 		{
 			ID:        1,
@@ -170,10 +170,8 @@ func TestGithubAppClientGetOrgsForUserProvidingInstallationID(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getOrgsForUser("example", cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	orgs, err := appClient.getOrgsForUser(context.Background(), "example", cfg)
+	require.NoError(t, err)
 	want := []Account{
 		{
 			ID:        1,
@@ -201,10 +199,8 @@ func TestGithubAppClientGetTeamsForUserNotProvidingInstallationID(t *testing.T) 
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getTeamsForUser("octocat", cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	orgs, err := appClient.getTeamsForUser(context.Background(), "octocat", cfg)
+	require.NoError(t, err)
 
 	want := []Account{
 		{
@@ -251,10 +247,8 @@ func TestGithubAppClientGetTeamsForUserProvidingInstallationID(t *testing.T) {
 	}
 
 	appClient := githubAppClient{httpClient: http.DefaultClient}
-	orgs, err := appClient.getTeamsForUser("octocat", cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	orgs, err := appClient.getTeamsForUser(context.Background(), "octocat", cfg)
+	require.NoError(t, err)
 
 	want := []Account{
 		{
@@ -309,6 +303,29 @@ func TestGitHubAppClient(t *testing.T) {
 	}
 	app := os.Getenv("GITHUB_APP_ID")
 	appID, err := strconv.ParseInt(app, 10, 64)
+	require.NoError(t, err)
+
+	var installationID int64
+	if v := os.Getenv("GITHUB_INSTALLATION_ID"); v != "" {
+		i, err := strconv.ParseInt(v, 10, 64)
+		require.NoError(t, err)
+		installationID = i
+	}
+
+	data, err := getDataForApp(context.Background(), appID, privateKey, installationID, "")
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, data.members)
+	assert.NotEmpty(t, data.orgs)
+}
+
+func TestGitHubAppInstallationClient(t *testing.T) {
+	privateKey := []byte(os.Getenv("GITHUB_APP_KEY"))
+	if len(privateKey) == 0 {
+		t.Skip("No GITHUB_APP_KEY provided")
+	}
+	app := os.Getenv("GITHUB_APP_ID")
+	appID, err := strconv.ParseInt(app, 10, 64)
 	if err != nil {
 		t.Fatalf("invalid app ID: %q", app)
 	}
@@ -321,17 +338,11 @@ func TestGitHubAppClient(t *testing.T) {
 		}
 		installationID = i
 	}
+	client, err := getInstallationClient(context.TODO(), appID, privateKey, installationID, "")
+	require.NoError(t, err)
 
-	data, err := getDataForApp(context.Background(), appID, privateKey, installationID, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	result, _, err := client.Search.Users(context.TODO(), "rancher", &github.SearchOptions{})
+	require.NoError(t, err)
 
-	if len(data.members) == 0 {
-		t.Errorf("did not get any members")
-	}
-
-	if len(data.orgs) == 0 {
-		t.Errorf("did not get any orgs")
-	}
+	assert.NotEmpty(t, result.Users)
 }
