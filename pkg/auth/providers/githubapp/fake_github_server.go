@@ -353,7 +353,7 @@ func (s *fakeGitHubServer) userHandler(w http.ResponseWriter, r *http.Request) {
 
 	marshalJSON(s.t, w, map[string]any{
 		"login":                     "octocat",
-		"id":                        1,
+		"id":                        1234,
 		"node_id":                   "MDQ6VXNlcjE=",
 		"avatar_url":                "https://github.com/images/error/octocat_happy.gif",
 		"gravatar_id":               "",
@@ -457,7 +457,7 @@ func (s *fakeGitHubServer) installationHandler(w http.ResponseWriter, r *http.Re
 		"id": 1,
 		"account": map[string]any{
 			"login":               "octocat",
-			"id":                  1,
+			"id":                  1234,
 			"node_id":             "MDQ6VXNlcjE=",
 			"avatar_url":          "https://github.com/images/error/octocat_happy.gif",
 			"gravatar_id":         "",
@@ -623,7 +623,7 @@ func (s *fakeGitHubServer) installationTokenHandler(w http.ResponseWriter, r *ht
 				"full_name": "octocat/Hello-World",
 				"owner": map[string]any{
 					"login": "octocat",
-					"id":    1,
+					"id":    1234,
 				},
 			},
 		},
@@ -745,8 +745,7 @@ func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter,
 	marshalJSON(s.t, w, []map[string]any{
 		{
 			"login":               "octocat",
-			"id":                  1,
-			"name":                "octocat",
+			"id":                  1234,
 			"node_id":             "MDQ6VXNlcjE=",
 			"avatar_url":          "https://github.com/images/error/octocat_happy.gif",
 			"url":                 "https://api.github.com/users/octocat",
@@ -766,7 +765,6 @@ func (s *fakeGitHubServer) organizationTeamMembersHandler(w http.ResponseWriter,
 		{
 			"login":               "example",
 			"id":                  2,
-			"name":                "example",
 			"avatar_url":          "https://github.com/images/error/example_happy.gif",
 			"url":                 "https://api.github.com/users/example",
 			"html_url":            "https://github.com/example",

@@ -468,6 +468,32 @@ func TestGitHubAppData(t *testing.T) {
 		}
 		assert.Equal(t, want2, member2)
 	})
+
+	t.Run("find org by id", func(t *testing.T) {
+		unknown := data.findOrgByID(1)
+		assert.Nil(t, unknown)
+
+		org1 := data.findOrgByID(1234567)
+		want1 := &Account{
+			Login:     "example",
+			ID:        1234567,
+			Name:      "Example Org",
+			AvatarURL: "https://example.com/avatar1.jpg",
+			Type:      "Organization",
+		}
+		assert.Equal(t, want1, org1)
+
+		org2 := data.findOrgByID(2345678)
+		want2 := &Account{
+			ID:        2345678,
+			Login:     "other-org",
+			Name:      "Other Org",
+			AvatarURL: "https://example.com/avatar2.jpg",
+			Type:      "Organization",
+		}
+		assert.Equal(t, want2, org2)
+	})
+
 }
 
 func TestGitHubAppData_Errors(t *testing.T) {
