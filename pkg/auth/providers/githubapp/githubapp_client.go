@@ -12,12 +12,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/go-github/v72/github"
 	cattlev3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/tomnomnom/linkheader"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/github"
 )
 
 // githubAppClient implements client for GitHub using a GitHub App.
@@ -25,23 +24,7 @@ type githubAppClient struct {
 	httpClient *http.Client
 }
 
-func (g *githubAppClient) getOAuthAccessToken(code string, config *mgmtv3.GithubAppConfig) *oauth2.Config {
-	endpoint := github.Endpoint
-	if config.Hostname != "" {
-		endpoint = oauth2.Endpoint{
-			AuthURL:  "https://" + config.Hostname + "/login/oauth/authorize",
-			TokenURL: "https://" + config.Hostname + "/login/oauth/access_token",
-		}
-	}
-
-	return &oauth2.Config{
-		ClientID:     config.ClientID,
-		ClientSecret: config.ClientSecret,
-		Endpoint:     endpoint,
-	}
-}
-
-func (g *githubAppClient) getAccessToken(code string, config *mgmtv3.GithubAppConfig) (string, error) {
+func (g *githubAppClient) getAccessToken(ctx context.Context, code string, config *mgmtv3.GithubAppConfig) (string, error) {
 	form := url.Values{}
 	form.Add("client_id", config.ClientID)
 	form.Add("client_secret", config.ClientSecret)
@@ -49,7 +32,7 @@ func (g *githubAppClient) getAccessToken(code string, config *mgmtv3.GithubAppCo
 
 	url := getAPIURL("TOKEN", config)
 
-	b, err := g.postToGithub(url, form)
+	b, err := g.postToGithub(ctx, url, form)
 	if err != nil {
 		return "", fmt.Errorf("github getAccessToken: POST url %v received error from github, err: %v", url, err)
 	}
@@ -73,9 +56,9 @@ func (g *githubAppClient) getAccessToken(code string, config *mgmtv3.GithubAppCo
 	return acessToken, nil
 }
 
-func (g *githubAppClient) getUser(githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
+func (g *githubAppClient) getUser(ctx context.Context, githubAccessToken string, config *mgmtv3.GithubAppConfig) (Account, error) {
 	url := getAPIURL("USER_INFO", config)
-	b, _, err := g.getFromGithub(githubAccessToken, url)
+	b, _, err := g.getFromGithub(ctx, githubAccessToken, url)
 	if err != nil {
 		logrus.Errorf("Github getGithubUser: GET url %v received error from github, err: %v", url, err)
 		return Account{}, err
@@ -91,22 +74,8 @@ func (g *githubAppClient) getUser(githubAccessToken string, config *mgmtv3.Githu
 }
 
 // TODO: These two need to use the cache.
-func (g *githubAppClient) getOrgsForUser(username string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	appID, err := strconv.ParseInt(config.AppID, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parsing AppID: %w", err)
-	}
-
-	var installationID int64
-	if config.InstallationID != "" {
-		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("parsing InstallationID: %w", err)
-		}
-		installationID = parsed
-	}
-
-	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+func (g *githubAppClient) getOrgsForUser(ctx context.Context, username string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
+	data, err := getGitHubAppDataFromConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -114,22 +83,8 @@ func (g *githubAppClient) getOrgsForUser(username string, config *mgmtv3.GithubA
 	return data.listOrgsForUser(username), nil
 }
 
-func (g *githubAppClient) getTeamsForUser(username string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
-	appID, err := strconv.ParseInt(config.AppID, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parsing AppID: %w", err)
-	}
-
-	var installationID int64
-	if config.InstallationID != "" {
-		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("parsing InstallationID: %w", err)
-		}
-		installationID = parsed
-	}
-
-	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+func (g *githubAppClient) getTeamsForUser(ctx context.Context, username string, config *mgmtv3.GithubAppConfig) ([]Account, error) {
+	data, err := getGitHubAppDataFromConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -137,47 +92,25 @@ func (g *githubAppClient) getTeamsForUser(username string, config *mgmtv3.Github
 	return data.listTeamsForUser(username), nil
 }
 
-func (g *githubAppClient) searchUsers(searchTerm, searchType string, config *cattlev3.GithubAppConfig) ([]Account, error) {
-	appID, err := strconv.ParseInt(config.AppID, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parsing AppID: %w", err)
-	}
-
-	var installationID int64
-	if config.InstallationID != "" {
-		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("parsing InstallationID: %w", err)
-		}
-		installationID = parsed
-	}
-
-	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+func (g *githubAppClient) searchUsers(ctx context.Context, searchTerm, searchType string, config *cattlev3.GithubAppConfig) ([]Account, error) {
+	data, err := getGitHubAppDataFromConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
+
+	// client, err := getInstallationClient(context.TODO(), appID, privateKey, installationID, "")
+	// require.NoError(t, err)
+
+	// result, _, err := client.Search.Users(context.TODO(), "rancher", &github.SearchOptions{})
+	// require.NoError(t, err)
 
 	searchResult := data.searchOrgs(searchTerm)
 	searchResult = append(searchResult, data.searchMembers(searchTerm)...)
 	return searchResult, nil
 }
 
-func (g *githubAppClient) searchTeams(searchTerm string, config *cattlev3.GithubAppConfig) ([]Account, error) {
-	appID, err := strconv.ParseInt(config.AppID, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parsing AppID: %w", err)
-	}
-
-	var installationID int64
-	if config.InstallationID != "" {
-		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("parsing InstallationID: %w", err)
-		}
-		installationID = parsed
-	}
-
-	data, err := getDataForApp(context.Background(), appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+func (g *githubAppClient) searchTeams(ctx context.Context, searchTerm string, config *cattlev3.GithubAppConfig) ([]Account, error) {
+	data, err := getGitHubAppDataFromConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -185,18 +118,35 @@ func (g *githubAppClient) searchTeams(searchTerm string, config *cattlev3.Github
 	return data.searchTeams(searchTerm), nil
 }
 
-func (g *githubAppClient) getTeamByID(id string, config *mgmtv3.GithubAppConfig) (Account, error) {
-	return Account{}, errors.New("fail")
+func (g *githubAppClient) getTeamByID(ctx context.Context, id int, config *mgmtv3.GithubAppConfig) (Account, error) {
+	return Account{}, errors.New("fail getTeamByID")
 }
 
-func (g *githubAppClient) getUserOrgByID(id string, config *mgmtv3.GithubAppConfig) (Account, error) {
-	return Account{}, errors.New("fail")
-}
-
-func (g *githubAppClient) postToGithub(url string, form url.Values) ([]byte, error) {
-	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+func (g *githubAppClient) getUserOrgByID(ctx context.Context, id int, config *mgmtv3.GithubAppConfig) (Account, error) {
+	data, err := getGitHubAppDataFromConfig(ctx, config)
 	if err != nil {
-		logrus.Error(err)
+		return Account{}, err
+	}
+
+	acct := data.findOrgByID(id)
+	if acct != nil {
+		return *acct, nil
+	}
+
+	// This does not return the user "DisplayName" because it's not part of the
+	// membership response.
+	acct = data.findMemberByID(id)
+	if acct != nil {
+		return *acct, nil
+	}
+
+	return Account{}, fmt.Errorf("unknown ID %v", id)
+}
+
+func (g *githubAppClient) postToGithub(ctx context.Context, url string, form url.Values) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
 	}
 	req.PostForm = form
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -221,8 +171,8 @@ func (g *githubAppClient) postToGithub(url string, form url.Values) ([]byte, err
 	return io.ReadAll(resp.Body)
 }
 
-func (g *githubAppClient) getFromGithub(githubAccessToken string, url string) ([]byte, string, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (g *githubAppClient) getFromGithub(ctx context.Context, githubAccessToken string, url string) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -302,13 +252,13 @@ func getAPIURL(endpoint string, config *mgmtv3.GithubAppConfig) string {
 	return toReturn
 }
 
-func (g *githubAppClient) paginateGithub(githubAccessToken string, url string) ([][]byte, error) {
+func (g *githubAppClient) paginateGithub(ctx context.Context, githubAccessToken string, url string) ([][]byte, error) {
 	var responses [][]byte
 	var err error
 	var response []byte
 	nextURL := url
 	for nextURL != "" {
-		response, nextURL, err = g.getFromGithub(githubAccessToken, nextURL)
+		response, nextURL, err = g.getFromGithub(ctx, githubAccessToken, nextURL)
 		if err != nil {
 			return nil, err
 		}
@@ -331,4 +281,42 @@ func (g *githubAppClient) nextGithubPage(response *http.Response) string {
 	}
 
 	return ""
+}
+
+// TODO: Move this into a method on the struct and cache!
+func getGitHubAppDataFromConfig(ctx context.Context, config *mgmtv3.GithubAppConfig) (*gitHubAppData, error) {
+	appID, installationID, err := getInstallationAndAppIDFromConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return getDataForApp(ctx, appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+}
+
+// TODO: Move this into a method on the struct and cache!
+func getInstallationClientFromConfig(ctx context.Context, config *mgmtv3.GithubAppConfig) (*github.Client, error) {
+	appID, installationID, err := getInstallationAndAppIDFromConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return getInstallationClient(ctx, appID, []byte(config.PrivateKey), installationID, getAPIURL("", config))
+}
+
+func getInstallationAndAppIDFromConfig(config *mgmtv3.GithubAppConfig) (int64, int64, error) {
+	appID, err := strconv.ParseInt(config.AppID, 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parsing AppID: %w", err)
+	}
+
+	var installationID int64
+	if config.InstallationID != "" {
+		parsed, err := strconv.ParseInt(config.InstallationID, 10, 64)
+		if err != nil {
+			return 0, 0, fmt.Errorf("parsing InstallationID: %w", err)
+		}
+		installationID = parsed
+	}
+
+	return appID, installationID, nil
 }
