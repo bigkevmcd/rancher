@@ -462,7 +462,7 @@ func TestSearchPrincipals(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "githubapp_user://2",
 					},
-					DisplayName:    "example",
+					DisplayName:    "example user",
 					LoginName:      "example",
 					ProfilePicture: "https://github.com/images/error/example_happy.gif",
 					PrincipalType:  "user",
