@@ -17,6 +17,7 @@ import (
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/tomnomnom/linkheader"
+	"k8s.io/utils/ptr"
 )
 
 // githubAppClient implements client for GitHub using a GitHub App.
@@ -93,19 +94,40 @@ func (g *githubAppClient) getTeamsForUser(ctx context.Context, username string, 
 }
 
 func (g *githubAppClient) searchUsers(ctx context.Context, searchTerm, searchType string, config *cattlev3.GithubAppConfig) ([]Account, error) {
+
+	client, err := getInstallationClientFromConfig(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+
+	result, _, err := client.Search.Users(ctx, searchTerm, &github.SearchOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to search for users with term: %s: %w", searchTerm, err)
+	}
+
+	var searchResult []Account
+	// TODO: Incomplete searches?
+	for _, user := range result.Users {
+		m := member{
+			gitHubObject: gitHubObject{
+				name:      ptr.Deref(user.Name, ""),
+				login:     ptr.Deref(user.Login, ""),
+				avatarURL: ptr.Deref(user.AvatarURL, ""),
+				id:        int(ptr.Deref(user.ID, 0)),
+				htmlURL:   ptr.Deref(user.HTMLURL, ""),
+			},
+		}
+		searchResult = append(searchResult, m.toAccount())
+	}
+
+	// Cache this
 	data, err := getGitHubAppDataFromConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	// client, err := getInstallationClient(context.TODO(), appID, privateKey, installationID, "")
-	// require.NoError(t, err)
+	searchResult = append(searchResult, data.searchOrgs(searchTerm)...)
 
-	// result, _, err := client.Search.Users(context.TODO(), "rancher", &github.SearchOptions{})
-	// require.NoError(t, err)
-
-	searchResult := data.searchOrgs(searchTerm)
-	searchResult = append(searchResult, data.searchMembers(searchTerm)...)
 	return searchResult, nil
 }
 
