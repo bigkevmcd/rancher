@@ -329,7 +329,17 @@ func (c AzureMSGraphClient) MarshalTokenJSON() (string, error) {
 	return string(b), err
 }
 
-func userToPrincipal(user models.Userable) v3.Principal {
+type azureObject interface {
+	GetId() *string
+	GetDisplayName() *string
+}
+
+type azureUserObject interface {
+	azureObject
+	GetUserPrincipalName() *string
+}
+
+func userToPrincipal(user azureUserObject) v3.Principal {
 	return v3.Principal{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: Name + "_user://" + *user.GetId(),
@@ -341,7 +351,7 @@ func userToPrincipal(user models.Userable) v3.Principal {
 	}
 }
 
-func groupToPrincipal(group models.Groupable) v3.Principal {
+func groupToPrincipal(group azureObject) v3.Principal {
 	return v3.Principal{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: Name + "_group://" + *group.GetId(),
