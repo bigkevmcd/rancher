@@ -673,7 +673,7 @@ func (p *mockLocalProvider) GetName() string {
 	panic("not implemented")
 }
 
-func (p *mockLocalProvider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
+func (p *mockLocalProvider) AuthenticateUser(ctx context.Context, _ *types.APIContext, input interface{}) (v3.Principal, []v3.Principal, string, error) {
 	panic("not implemented")
 }
 

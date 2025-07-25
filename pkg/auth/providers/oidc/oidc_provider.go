@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -65,6 +66,7 @@ type ClaimInfo struct {
 	Groups            []string `json:"groups"`
 	FullGroupPath     []string `json:"full_group_path"`
 	ACR               string   `json:"acr"`
+	SessionID         string   `json:"sid"`
 }
 
 func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, tokenMGR *tokens.Manager) common.AuthProvider {
@@ -79,14 +81,6 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 	}
 }
 
-func (o *OpenIDCProvider) LogoutAll(apiContext *types.APIContext, token accessor.TokenAccessor) error {
-	return nil
-}
-
-func (o *OpenIDCProvider) Logout(apiContext *types.APIContext, token accessor.TokenAccessor) error {
-	return nil
-}
-
 func (o *OpenIDCProvider) GetName() string {
 	return Name
 }
@@ -96,7 +90,7 @@ func (o *OpenIDCProvider) CustomizeSchema(schema *types.Schema) {
 	schema.Formatter = o.Formatter
 }
 
-func (o *OpenIDCProvider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
+func (o *OpenIDCProvider) AuthenticateUser(ctx context.Context, apiContext *types.APIContext, input interface{}) (v3.Principal, []v3.Principal, string, error) {
 	login, ok := input.(*v32.OIDCLogin)
 	if !ok {
 		return v3.Principal{}, nil, "", fmt.Errorf("unexpected input type")
@@ -117,6 +111,7 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *v32.OID
 			return userPrincipal, nil, "", userClaimInfo, err
 		}
 	}
+
 	userInfo, oauth2Token, err := o.getUserInfoFromAuthCode(&ctx, config, oauthLoginInfo.Code, &userClaimInfo, "")
 	if err != nil {
 		return userPrincipal, groupPrincipals, "", userClaimInfo, err
@@ -124,6 +119,11 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *v32.OID
 	userPrincipal = o.userToPrincipal(userInfo, userClaimInfo)
 	userPrincipal.Me = true
 	groupPrincipals = o.getGroupsFromClaimInfo(userClaimInfo)
+
+	// isSecure := false
+	// 		if r.URL.Scheme == "https" {
+	// 			isSecure = true
+	// 		}
 
 	logrus.Debugf("[generic oidc] loginuser: checking user's access to rancher")
 	allowed, err := o.UserMGR.CheckAccess(config.AccessMode, config.AllowedPrincipalIDs, userPrincipal.Name, groupPrincipals)
@@ -635,6 +635,35 @@ func (o *OpenIDCProvider) getOIDCProvider(ctx context.Context, oidcConfig *v32.O
 	}
 	// This will perform discovery in the oidc library
 	return oidc.NewProvider(ctx, oidcConfig.Issuer)
+}
+
+func (o *OpenIDCProvider) LogoutAll(apiContext *types.APIContext, token accessor.TokenAccessor) error {
+	return nil
+}
+
+func (o *OpenIDCProvider) Logout(apiContext *types.APIContext, token accessor.TokenAccessor) error {
+	oidcLogout := &v32.OIDCConfigLogoutInput{}
+	r := apiContext.Request
+	if err := json.NewDecoder(r.Body).Decode(oidcLogout); err != nil {
+		return httperror.NewAPIError(httperror.InvalidBodyContent,
+			fmt.Sprintf("OIDC: parsing request body: %v", err))
+	}
+
+	// token.GetUserPrincipal()
+	// userName := o.UserMGR.GetUser(apiContext)
+
+	return nil
+}
+
+func (s *OpenIDCProvider) setSessionToken(w http.ResponseWriter, sid string, isSecure bool) {
+	tokenCookie := &http.Cookie{
+		Name:     "R_OIDC_SID",
+		Value:    sid,
+		Secure:   isSecure,
+		Path:     "/",
+		HttpOnly: true,
+	}
+	http.SetCookie(w, tokenCookie)
 }
 
 func isValidACR(claimACR string, configuredACR string) bool {

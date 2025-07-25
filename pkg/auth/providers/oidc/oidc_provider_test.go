@@ -1,22 +1,28 @@
 package oidc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/rancher/norman/types"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/providers/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"golang.org/x/oauth2"
 )
@@ -482,6 +488,34 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogout(t *testing.T) {
+	o := OpenIDCProvider{
+		Name: "keycloakoidc",
+	}
+	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+		FinalRedirectURL: "https://example.com/logged-out",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/logout", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	apiCtx := &types.APIContext{
+		Method:   req.Method,
+		Request:  req,
+		Query:    url.Values{},
+		Response: w,
+	}
+
+	require.NoError(t, o.Logout(apiCtx, nil))
+
+	resp := w.Result()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	// TODO: We should get a serialized JSON blob with the IDP URL
 }
 
 // mockOIDCServer creates an http server that mocks an OIDC provider. Responses are passed as a parameter.

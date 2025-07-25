@@ -104,7 +104,7 @@ func (s *Provider) TransformToAuthProvider(authConfig map[string]interface{}) (m
 	return p, nil
 }
 
-func (s *Provider) AuthenticateUser(ctx context.Context, input interface{}) (v3.Principal, []v3.Principal, string, error) {
+func (s *Provider) AuthenticateUser(_ context.Context, _ *types.APIContext, _ interface{}) (v3.Principal, []v3.Principal, string, error) {
 	return v3.Principal{}, nil, "", fmt.Errorf("SAML providers do not implement Authenticate User API")
 }
 
@@ -187,7 +187,7 @@ func (s *Provider) LogoutAll(apiContext *types.APIContext, token accessor.TokenA
 }
 
 func PerformSamlLogin(name string, apiContext *types.APIContext, input interface{}) error {
-	//input will contain the FINAL redirect URL
+	// input will contain the FINAL redirect URL
 	login, ok := input.(*v32.SamlLoginInput)
 	if !ok {
 		return errors.New("unexpected input type")

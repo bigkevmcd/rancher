@@ -628,16 +628,16 @@ type OIDCApplyInput struct {
 	Enabled    bool       `json:"enabled,omitempty"`
 }
 
-type KeyCloakOIDCConfig struct {
-	OIDCConfig `json:",inline" mapstructure:",squash"`
-}
-
 type OIDCConfigLogoutInput struct {
 	FinalRedirectURL string `json:"finalRedirectUrl"`
 }
 
 type OIDCConfigLogoutOutput struct {
 	IdpRedirectURL string `json:"idpRedirectUrl"`
+}
+
+type KeyCloakOIDCConfig struct {
+	OIDCConfig `json:",inline" mapstructure:",squash"`
 }
 
 // +genclient
