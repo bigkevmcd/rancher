@@ -606,6 +606,7 @@ type OIDCConfig struct {
 	AuthEndpoint       string `json:"authEndpoint,omitempty"`
 	TokenEndpoint      string `json:"tokenEndpoint,omitempty"`
 	UserInfoEndpoint   string `json:"userInfoEndpoint,omitempty"`
+	EndSessionEndpoint string `json:"endSessionEndpoint,omitempty"`
 	JWKSUrl            string `json:"jwksUrl,omitempty"`
 	Certificate        string `json:"certificate,omitempty"`
 	PrivateKey         string `json:"privateKey,omitempty" norman:"type=password"`
@@ -625,6 +626,14 @@ type OIDCApplyInput struct {
 	OIDCConfig OIDCConfig `json:"oidcConfig,omitempty"`
 	Code       string     `json:"code,omitempty"`
 	Enabled    bool       `json:"enabled,omitempty"`
+}
+
+type OIDCConfigLogoutInput struct {
+	FinalRedirectURL string `json:"finalRedirectUrl"`
+}
+
+type OIDCConfigLogoutOutput struct {
+	IdpRedirectURL string `json:"idpRedirectUrl"`
 }
 
 type KeyCloakOIDCConfig struct {
