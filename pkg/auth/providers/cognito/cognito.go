@@ -21,8 +21,8 @@ const (
 	Name = "cognito"
 )
 
-func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, tokenMGR *tokens.Manager) common.AuthProvider {
-	return &CognitoProvider{
+func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, tokenMgr *tokens.Manager) common.AuthProvider {
+	p := &CognitoProvider{
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: baseoidc.OpenIDCProvider{
 				Name:        Name,
@@ -31,10 +31,12 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 				AuthConfigs: mgmtCtx.Management.AuthConfigs(""),
 				Secrets:     mgmtCtx.Wrangler.Core.Secret(),
 				UserMGR:     userMGR,
-				TokenMGR:    tokenMGR,
+				TokenMgr:    tokenMgr,
 			},
 		},
 	}
+	p.GetConfig = p.GetOIDCConfig
+	return p
 }
 
 // GetName returns the name of this provider.

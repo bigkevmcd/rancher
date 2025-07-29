@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -9,14 +10,19 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/rancher/norman/types"
+	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/providers/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"golang.org/x/oauth2"
 )
@@ -266,12 +272,12 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			defer server.Shutdown(context.TODO())
 			o := OpenIDCProvider{
 				Name:     providerName,
-				TokenMGR: test.tokenManagerMock(oidcResp.token),
+				TokenMgr: test.tokenManagerMock(oidcResp.token),
 			}
 			ctx := context.TODO()
 			claimInfo := &ClaimInfo{}
 
-			userInfo, token, err := o.getUserInfoFromAuthCode(&ctx, test.config(port), test.authCode, claimInfo, userId)
+			userInfo, token, idToken, err := o.getUserInfoFromAuthCode(&ctx, test.config(port), test.authCode, claimInfo, userId)
 
 			if test.expectedErrorMessage != "" {
 				assert.ErrorContains(t, err, test.expectedErrorMessage)
@@ -283,6 +289,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 				assert.Equal(t, test.expectedUserInfoSubject, userInfo.Subject)
 				assert.Equal(t, test.expectedUserInfoClaimInfo, claims)
 				assert.Equal(t, oidcResp.token.AccessToken, token.AccessToken) //token should be the same as the one returned by the mock oidc server.
+				assert.NotEmpty(t, idToken)                                    // the token is generated each time.
 			}
 		})
 	}
@@ -469,7 +476,7 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			defer server.Shutdown(context.TODO())
 			o := OpenIDCProvider{
 				Name:     providerName,
-				TokenMGR: test.tokenManagerMock(oidcResp.token),
+				TokenMgr: test.tokenManagerMock(oidcResp.token),
 			}
 
 			claimsInfo, err := o.getClaimInfoFromToken(context.TODO(), test.config(port), test.storedToken(port), userId)
@@ -482,6 +489,113 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogoutAll(t *testing.T) {
+	const (
+		userId       string = "testing-user"
+		providerName string = "keycloak"
+	)
+	oidcConfig := newOIDCConfig("8090", func(s *v32.OIDCConfig) {
+		s.EndSessionEndpoint = "http://localhost:8090/user/logout"
+	})
+	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
+	o := OpenIDCProvider{
+		Name:      providerName,
+		GetConfig: func() (*v32.OIDCConfig, error) { return oidcConfig, nil },
+	}
+	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+		FinalRedirectURL: "https://example.com/logged-out",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/logout", bytes.NewReader(b))
+	req.AddCookie(&http.Cookie{Name: "R_OIDC_ID", Value: "test-id-token"})
+
+	nr := &normanRecorder{}
+	apiContext := &types.APIContext{
+		Method:         req.Method,
+		Request:        req,
+		Query:          url.Values{},
+		ResponseWriter: nr,
+	}
+
+	require.NoError(t, o.LogoutAll(apiContext, testToken))
+	wantData := map[string]any{
+		"idpRedirectUrl": "http://localhost:8090/user/logout?id_token_hint=test-id-token&post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Flogged-out",
+		"type":           "oidcConfigLogoutOutput",
+	}
+	require.Equal(t, []normanResponse{{code: http.StatusOK, data: wantData}}, nr.responses)
+}
+
+func TestLogoutAllNoEndSessionEndpoint(t *testing.T) {
+	const (
+		userId       string = "testing-user"
+		providerName string = "oidc"
+	)
+	oidcConfig := newOIDCConfig("8090")
+	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
+	o := OpenIDCProvider{
+		Name:      providerName,
+		GetConfig: func() (*v32.OIDCConfig, error) { return oidcConfig, nil },
+	}
+	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+		FinalRedirectURL: "https://example.com/logged-out",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/logout", bytes.NewReader(b))
+	req.AddCookie(&http.Cookie{Name: "R_OIDC_ID", Value: "test-id-token"})
+
+	nr := &normanRecorder{}
+	apiContext := &types.APIContext{
+		Method:         req.Method,
+		Request:        req,
+		Query:          url.Values{},
+		ResponseWriter: nr,
+	}
+
+	require.NoError(t, o.LogoutAll(apiContext, testToken))
+	wantData := map[string]any{
+		"idpRedirectUrl": "",
+		"type":           "oidcConfigLogoutOutput",
+	}
+	require.Equal(t, []normanResponse{{code: http.StatusOK, data: wantData}}, nr.responses)
+}
+
+func TestLogoutAllNoIDToken(t *testing.T) {
+	const (
+		userId       string = "testing-user"
+		providerName string = "oidc"
+	)
+	oidcConfig := newOIDCConfig("8090", func(s *v32.OIDCConfig) {
+		s.EndSessionEndpoint = "http://localhost:8090/user/logout"
+	})
+
+	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
+	o := OpenIDCProvider{
+		Name:      providerName,
+		GetConfig: func() (*v32.OIDCConfig, error) { return oidcConfig, nil },
+	}
+	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+		FinalRedirectURL: "https://example.com/logged-out",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/logout", bytes.NewReader(b))
+
+	nr := &normanRecorder{}
+	apiContext := &types.APIContext{
+		Method:         req.Method,
+		Request:        req,
+		Query:          url.Values{},
+		ResponseWriter: nr,
+	}
+
+	require.NoError(t, o.LogoutAll(apiContext, testToken))
+	wantData := map[string]any{
+		"idpRedirectUrl": "http://localhost:8090/user/logout?post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Flogged-out",
+		"type":           "oidcConfigLogoutOutput",
+	}
+	require.Equal(t, []normanResponse{{code: http.StatusOK, data: wantData}}, nr.responses)
 }
 
 // mockOIDCServer creates an http server that mocks an OIDC provider. Responses are passed as a parameter.
@@ -580,8 +694,8 @@ func newOIDCResponses(privateKey *rsa.PrivateKey, port string) oidcResponses {
 	}
 }
 
-func newOIDCConfig(port string) *v32.OIDCConfig {
-	return &v32.OIDCConfig{
+func newOIDCConfig(port string, opts ...func(*v32.OIDCConfig)) *v32.OIDCConfig {
+	cfg := &v32.OIDCConfig{
 		Issuer:           "http://localhost:" + port,
 		ClientID:         "test",
 		JWKSUrl:          "http://localhost:" + port + "/.well-known/jwks.json",
@@ -589,6 +703,12 @@ func newOIDCConfig(port string) *v32.OIDCConfig {
 		TokenEndpoint:    "http://localhost:" + port + "/token",
 		UserInfoEndpoint: "http://localhost:" + port + "/user",
 	}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	return cfg
 }
 
 type jsonWebKeySet struct {
@@ -649,4 +769,21 @@ func (m tokenMatcher) String() string {
 
 func EqToken(accessToken string) gomock.Matcher {
 	return tokenMatcher{accessToken}
+}
+
+// normanRecorder is like httptest.ResponseRecorder, but for norman's types.ResponseWriter interface
+type normanRecorder struct {
+	responses []normanResponse
+}
+
+func (n *normanRecorder) Write(_ *types.APIContext, code int, obj interface{}) {
+	n.responses = append(n.responses, normanResponse{
+		code: code,
+		data: obj,
+	})
+}
+
+type normanResponse struct {
+	code int
+	data any
 }
