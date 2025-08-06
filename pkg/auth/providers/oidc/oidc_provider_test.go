@@ -19,7 +19,6 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/rancher/norman/types"
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
-	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/providers/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,7 +119,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 		assert.NoError(t, err)
 	}
 	tests := map[string]struct {
-		config                    func(string) *v32.OIDCConfig
+		config                    func(string) *v3.OIDCConfig
 		authCode                  string
 		tokenManagerMock          func(token *Token) tokenManager
 		oidcProviderResponses     func(string) oidcResponses
@@ -130,7 +129,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 		expectedErrorMessage      string
 	}{
 		"token is updated and userInfo returned": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			tokenManagerMock: func(token *Token) tokenManager {
@@ -157,7 +156,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			},
 		},
 		"get groups with GroupsClaims": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				c := newOIDCConfig(port)
 				c.GroupsClaim = "custom:groups"
 
@@ -209,8 +208,8 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 		},
 
 		"error - invalid certificate": {
-			config: func(port string) *v32.OIDCConfig {
-				return &v32.OIDCConfig{
+			config: func(port string) *v3.OIDCConfig {
+				return &v3.OIDCConfig{
 					Issuer:      "http://localhost:" + port,
 					ClientID:    "test",
 					JWKSUrl:     "http://localhost:" + port + "/.well-known/jwks.json",
@@ -227,7 +226,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			expectedErrorMessage: "could not parse cert/key pair: tls: failed to find any PEM data in certificate input",
 		},
 		"error - invalid token from server": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			tokenManagerMock: func(token *Token) tokenManager {
@@ -242,7 +241,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			expectedErrorMessage: "oidc: malformed jwt",
 		},
 		"error - invalid user response": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			tokenManagerMock: func(token *Token) tokenManager {
@@ -308,7 +307,7 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		config                func(string) *v32.OIDCConfig
+		config                func(string) *v3.OIDCConfig
 		storedToken           func(string) *oauth2.Token
 		tokenManagerMock      func(token *Token) tokenManager
 		oidcProviderResponses func(string) oidcResponses
@@ -316,7 +315,7 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 		expectedErrorMessage  string
 	}{
 		"get claims with valid token": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			storedToken: func(port string) *oauth2.Token {
@@ -348,7 +347,7 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			},
 		},
 		"token is refreshed and updated when expired": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			oidcProviderResponses: func(port string) oidcResponses {
@@ -392,8 +391,8 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			},
 		},
 		"error - invalid certificate": {
-			config: func(port string) *v32.OIDCConfig {
-				return &v32.OIDCConfig{
+			config: func(port string) *v3.OIDCConfig {
+				return &v3.OIDCConfig{
 					Issuer:      "http://localhost:" + port,
 					ClientID:    "test",
 					JWKSUrl:     "http://localhost:" + port + "/.well-known/jwks.json",
@@ -414,7 +413,7 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			expectedErrorMessage: "could not parse cert/key pair: tls: failed to find any PEM data in certificate input",
 		},
 		"error - invalid token": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			storedToken: func(port string) *oauth2.Token {
@@ -432,7 +431,7 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 			expectedErrorMessage: "oidc: malformed jwt",
 		},
 		"error - invalid user response": {
-			config: func(port string) *v32.OIDCConfig {
+			config: func(port string) *v3.OIDCConfig {
 				return newOIDCConfig(port)
 			},
 			storedToken: func(port string) *oauth2.Token {
@@ -496,15 +495,15 @@ func TestLogoutAll(t *testing.T) {
 		userId       string = "testing-user"
 		providerName string = "keycloak"
 	)
-	oidcConfig := newOIDCConfig("8090", func(s *v32.OIDCConfig) {
+	oidcConfig := newOIDCConfig("8090", func(s *v3.OIDCConfig) {
 		s.EndSessionEndpoint = "http://localhost:8090/user/logout"
 	})
 	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*v32.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
 	}
-	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+	b, err := json.Marshal(&v3.OIDCConfigLogoutInput{
 		FinalRedirectURL: "https://example.com/logged-out",
 	})
 	require.NoError(t, err)
@@ -537,9 +536,9 @@ func TestLogoutAllNoEndSessionEndpoint(t *testing.T) {
 	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*v32.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
 	}
-	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+	b, err := json.Marshal(&v3.OIDCConfigLogoutInput{
 		FinalRedirectURL: "https://example.com/logged-out",
 	})
 	require.NoError(t, err)
@@ -567,16 +566,16 @@ func TestLogoutAllNoIDToken(t *testing.T) {
 		userId       string = "testing-user"
 		providerName string = "oidc"
 	)
-	oidcConfig := newOIDCConfig("8090", func(s *v32.OIDCConfig) {
+	oidcConfig := newOIDCConfig("8090", func(s *v3.OIDCConfig) {
 		s.EndSessionEndpoint = "http://localhost:8090/user/logout"
 	})
 
 	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*v32.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
 	}
-	b, err := json.Marshal(&v32.OIDCConfigLogoutInput{
+	b, err := json.Marshal(&v3.OIDCConfigLogoutInput{
 		FinalRedirectURL: "https://example.com/logged-out",
 	})
 	require.NoError(t, err)
@@ -694,8 +693,8 @@ func newOIDCResponses(privateKey *rsa.PrivateKey, port string) oidcResponses {
 	}
 }
 
-func newOIDCConfig(port string, opts ...func(*v32.OIDCConfig)) *v32.OIDCConfig {
-	cfg := &v32.OIDCConfig{
+func newOIDCConfig(port string, opts ...func(*v3.OIDCConfig)) *v3.OIDCConfig {
+	cfg := &v3.OIDCConfig{
 		Issuer:           "http://localhost:" + port,
 		ClientID:         "test",
 		JWKSUrl:          "http://localhost:" + port + "/.well-known/jwks.json",

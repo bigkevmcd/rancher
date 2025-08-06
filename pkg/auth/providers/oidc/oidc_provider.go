@@ -648,7 +648,7 @@ func (o *OpenIDCProvider) LogoutAll(apiContext *types.APIContext, token accessor
 		return err
 	}
 
-	idpRedirectURL, err := createIDPRedirectURL(apiContext, oidcConfig)
+	idpRedirectURL, err := o.createIDPRedirectURL(apiContext, oidcConfig)
 	if err != nil {
 		return err
 	}
@@ -667,7 +667,7 @@ func (o *OpenIDCProvider) LogoutAll(apiContext *types.APIContext, token accessor
 	return nil
 }
 
-func createIDPRedirectURL(apiContext *types.APIContext, config *v32.OIDCConfig) (string, error) {
+func (o *OpenIDCProvider) createIDPRedirectURL(apiContext *types.APIContext, config *v32.OIDCConfig) (string, error) {
 	if config.EndSessionEndpoint == "" {
 		logrus.Debug("OIDC: LogoutAll not redirecting without endSessionEndpoint")
 		return "", nil

@@ -2,7 +2,15 @@ package cognito
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
 
+	"github.com/rancher/norman/httperror"
+	"github.com/rancher/norman/types"
+	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/auth/accessor"
 	"github.com/rancher/rancher/pkg/auth/providers/common"
 	"github.com/rancher/rancher/pkg/auth/providers/genericoidc"
 	baseoidc "github.com/rancher/rancher/pkg/auth/providers/oidc"
@@ -10,6 +18,7 @@ import (
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
 	"github.com/rancher/rancher/pkg/types/config"
 	"github.com/rancher/rancher/pkg/user"
+	"github.com/sirupsen/logrus"
 )
 
 // CognitoProvider represents AWS Cognito auth provider
@@ -42,4 +51,60 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 // GetName returns the name of this provider.
 func (c *CognitoProvider) GetName() string {
 	return Name
+}
+
+func (o *CognitoProvider) LogoutAll(apiContext *types.APIContext, token accessor.TokenAccessor) error {
+	oidcConfig, err := o.GetConfig()
+	if err != nil {
+		return err
+	}
+
+	idpRedirectURL, err := createIDPRedirectURL(apiContext, oidcConfig)
+	if err != nil {
+		return err
+	}
+
+	if idpRedirectURL != "" {
+		// TODO: Remove this when this is connected up
+		logrus.Debugf("Redirecting to %s", idpRedirectURL)
+	}
+
+	data := map[string]interface{}{
+		"idpRedirectUrl": idpRedirectURL,
+		"type":           "oidcConfigLogoutOutput",
+	}
+	apiContext.WriteResponse(http.StatusOK, data)
+
+	return nil
+}
+
+// Based on https://docs.aws.amazon.com/cognito/latest/developerguide/logout-endpoint.html#get-logout
+func createIDPRedirectURL(apiContext *types.APIContext, config *v3.OIDCConfig) (string, error) {
+	if config.EndSessionEndpoint == "" {
+		logrus.Debug("OIDC: LogoutAll not redirecting without endSessionEndpoint")
+		return "", nil
+	}
+
+	idpRedirectURL, err := url.Parse(config.EndSessionEndpoint)
+	if err != nil {
+		logrus.Infof("OIDC: failed parsing end session endpoint: %v", err)
+		return "", err
+	}
+
+	oidcLogout := &v3.OIDCConfigLogoutInput{}
+	r := apiContext.Request
+	if err := json.NewDecoder(r.Body).Decode(oidcLogout); err != nil {
+		return "", httperror.NewAPIError(httperror.InvalidBodyContent,
+			fmt.Sprintf("OIDC: parsing request body: %v", err))
+	}
+
+	params := idpRedirectURL.Query()
+	params.Set("client_id", config.ClientID)
+	if oidcLogout.FinalRedirectURL != "" {
+		params.Set("logout_uri", oidcLogout.FinalRedirectURL)
+	}
+
+	idpRedirectURL.RawQuery = params.Encode()
+
+	return idpRedirectURL.String(), nil
 }
