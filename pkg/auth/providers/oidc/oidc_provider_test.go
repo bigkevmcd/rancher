@@ -138,16 +138,14 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			},
 			expectedUserInfoSubject: "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
 			expectedUserInfoClaimInfo: ClaimInfo{
-				Subject:           "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
-				PreferredUsername: "admin",
-				Groups:            []string{"admingroup"},
-				FullGroupPath:     []string{"/admingroup"},
+				Subject:       "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
+				Groups:        []string{"admingroup"},
+				FullGroupPath: []string{"/admingroup"},
 			},
 			expectedClaimInfo: &ClaimInfo{
-				Subject:           "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
-				PreferredUsername: "admin",
-				Groups:            []string{"admingroup"},
-				FullGroupPath:     []string{"/admingroup"},
+				Subject:       "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
+				Groups:        []string{"admingroup"},
+				FullGroupPath: []string{"/admingroup"},
 			},
 		},
 		"get groups with GroupsClaims": {
@@ -192,13 +190,11 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			},
 			expectedUserInfoSubject: "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
 			expectedUserInfoClaimInfo: ClaimInfo{
-				Subject:           "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
-				PreferredUsername: "admin",
+				Subject: "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
 			},
 			expectedClaimInfo: &ClaimInfo{
-				Subject:           "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
-				PreferredUsername: "admin",
-				Groups:            []string{"group1", "group2"},
+				Subject: "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
+				Groups:  []string{"group1", "group2"},
 			},
 		},
 
@@ -334,10 +330,9 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 				return mocks.NewMocktokenManager(ctrl)
 			},
 			expectedClaimInfo: &ClaimInfo{
-				Subject:           "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
-				PreferredUsername: "admin",
-				Groups:            []string{"admingroup"},
-				FullGroupPath:     []string{"/admingroup"},
+				Subject:       "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
+				Groups:        []string{"admingroup"},
+				FullGroupPath: []string{"/admingroup"},
 			},
 		},
 		"token is refreshed and updated when expired": {
@@ -372,10 +367,9 @@ func TestGetClaimInfoFromToken(t *testing.T) {
 				}
 			},
 			expectedClaimInfo: &ClaimInfo{
-				Subject:           "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
-				PreferredUsername: "admin",
-				Groups:            []string{"admingroup"},
-				FullGroupPath:     []string{"/admingroup"},
+				Subject:       "a8d0d2c4-6543-4546-8f1a-73e1d7dffcbd",
+				Groups:        []string{"admingroup"},
+				FullGroupPath: []string{"/admingroup"},
 			},
 			tokenManagerMock: func(token *Token) tokenManager {
 				mock := mocks.NewMocktokenManager(ctrl)

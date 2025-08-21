@@ -56,15 +56,11 @@ type OpenIDCProvider struct {
 }
 
 type ClaimInfo struct {
-	Subject           string   `json:"sub"`
-	Name              string   `json:"name"`
-	PreferredUsername string   `json:"preferred_username"`
-	GivenName         string   `json:"given_name"`
-	FamilyName        string   `json:"family_name"`
-	Email             string   `json:"email"`
-	Groups            []string `json:"groups"`
-	FullGroupPath     []string `json:"full_group_path"`
-	ACR               string   `json:"acr"`
+	Subject       string   `json:"sub"`
+	Name          string   `json:"name"`
+	Email         string   `json:"email"`
+	Groups        []string `json:"groups"`
+	FullGroupPath []string `json:"full_group_path"`
 }
 
 func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, tokenMGR *tokens.Manager) common.AuthProvider {
