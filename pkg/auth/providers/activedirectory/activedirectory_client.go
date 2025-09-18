@@ -532,6 +532,7 @@ func (p *adProvider) ldapConnection(config *v3.ActiveDirectoryConfig, caPool *x5
 	startTLS := config.StartTLS
 	return ldap.NewLDAPConn(servers, TLS, startTLS, port, connectionTimeout, caPool)
 }
+
 func (p *adProvider) permissionCheck(attributes []*ldapv3.EntryAttribute, config *v3.ActiveDirectoryConfig) bool {
 	userObjectClass := config.UserObjectClass
 	userEnabledAttribute := config.UserEnabledAttribute

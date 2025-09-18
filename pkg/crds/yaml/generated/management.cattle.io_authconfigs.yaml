@@ -1,0 +1,592 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: authconfigs.management.cattle.io
+spec:
+  group: management.cattle.io
+  names:
+    kind: AuthConfig
+    listKind: AuthConfigList
+    plural: authconfigs
+    singular: authconfig
+  scope: Cluster
+  versions:
+  - name: v3
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AuthConfigSpec defines the desired state of AuthConfig
+            properties:
+              accessMode:
+                description: |-
+                  accessMode controls which users can login to a Rancher installation:
+
+                  Possible enum values:
+                  - `"unrestricted"` means that any valid user account within the configured authentication provider can log in.
+                  - `"restricted"` means that access is limited to a predefined set of users and groups listed in the allowedPrincipalIDs parameter. Additionally, anyone who is also a member of a specific Environment (or project in the API) can log in.
+                  - `"required"` is the strictest mode, requiring that users must be present in the allowedIdentities list to log in.
+                enum:
+                - required
+                - restricted
+                - unrestricted
+                type: string
+              activedirectory:
+                description: |-
+                  activedirectory provides configuration for authenticating with Microsoft
+                  Active Directory.
+                properties:
+                  certificate:
+                    description: |-
+                      certificate is a PEM-formatted certificate chain - this is needed if the server
+                      you're connecting to presents a non-root-trusted certificate.
+                    type: string
+                  connectionTimeout:
+                    format: int64
+                    type: integer
+                  defaultLoginDomain:
+                    description: |-
+                      defaultLoginDomain can be configured with the NetBIOS name of your AD
+                      domain, usernames entered without a domain (e.g. "jdoe") will
+                      automatically be converted to a slashed, NetBIOS logon (e.g.
+                      "LOGIN_DOMAIN\jdoe") when binding to the AD server.
+
+                      If your users authenticate with the UPN (e.g. "jdoe@acme.com") as username then this field must be left empty.
+                    type: string
+                  groupDNAttribute:
+                    type: string
+                  groupMemberMappingAttribute:
+                    type: string
+                  groupMemberUserAttribute:
+                    type: string
+                  groupNameAttribute:
+                    type: string
+                  groupObjectClass:
+                    type: string
+                  groupSearchAttribute:
+                    type: string
+                  groupSearchBase:
+                    type: string
+                  groupSearchFilter:
+                    type: string
+                  nestedGroupMembershipEnabled:
+                    type: boolean
+                  port:
+                    default: 389
+                    description: |-
+                      port is the port to connect to the Active Directory server it defaults to
+                      389.
+
+                      Note that it is not possible to communicate with different servers on
+                      different ports.
+                    format: int64
+                    type: integer
+                  servers:
+                    description: servers is a list of hosts to query
+                    items:
+                      type: string
+                    type: array
+                  serviceAccountPassword:
+                    type: string
+                  serviceAccountUsername:
+                    type: string
+                  starttls:
+                    description: |-
+                      starttls indicates that Rancher should initiate a plain-text connection
+                      and negotiate a separate TLS connection with the Active Directory server.
+                    type: boolean
+                  tls:
+                    description: |-
+                      tls enables LDAPS (LDAP over TLS) Rancher initiates a TLS connection to
+                      the Active Directory server.
+                    type: boolean
+                  userDisabledBitMask:
+                    default: 2
+                    description: |-
+                      userDisabledBitmask configures a bitmask for the userEnabledAttribute to
+                      detect when a user is disabled.
+                    format: int64
+                    type: integer
+                  userEnabledAttribute:
+                    default: userAccountControl
+                    description: |-
+                      userEnabledAttribute is the attribute containing an integer value
+                      representing a bitwise enumeration of user account flags.
+
+                      Rancher uses this to determine if a user account is disabled. You should
+                      normally leave this set to the AD standard userAccountControl.
+                    type: string
+                  userLoginAttribute:
+                    type: string
+                  userLoginFilter:
+                    type: string
+                  userNameAttribute:
+                    type: string
+                  userObjectClass:
+                    type: string
+                  userSearchAttribute:
+                    type: string
+                  userSearchBase:
+                    type: string
+                  userSearchFilter:
+                    type: string
+                required:
+                - port
+                - servers
+                - userDisabledBitMask
+                - userEnabledAttribute
+                type: object
+              allowedPrincipalIds:
+                description: |-
+                  allowedPrincipalIDs works in conjunction with the accessMode.
+
+                  If populated the IDs must reference principals e.g. github_user://1
+                example: github_user://1
+                items:
+                  type: string
+                type: array
+              azuread:
+                description: |-
+                  azuread provides configuration for authenticating with Microsoft Entra
+                  (formerly Azure AD).
+                properties:
+                  applicationId:
+                    type: string
+                  applicationSecret:
+                    type: string
+                  authEndpoint:
+                    description: authEndpoint is used for custom endpoints.
+                    type: string
+                  deviceAuthEndpoint:
+                    type: string
+                  endpoint:
+                    default: https://login.microsoftonline.com/
+                    description: |-
+                      endpoint is the endpoint for communicating with Entra it defaults to
+                      https://login.microsoftonline.com/.
+                    pattern: ^https://.*$
+                    type: string
+                  graphEndpoint:
+                    description: |-
+                      graphEndpoint is the endpoint for communicating with the Entra Graph API
+                      it defaults to https://graph.microsoft.com.
+                    pattern: ^https://.*$
+                    type: string
+                  groupMembershipFilter:
+                    description: |-
+                      groupMembershipFilter allows filtering of the groups that are returned by
+                      Azure the filter is applied on the server-side.
+
+                      This uses the OData filtering language.
+                    type: string
+                  rancherUrl:
+                    description: |-
+                      rancherUrl is the redirect URL sent to Entra to redirect the user to
+                      after authentication.
+
+                      This must be an allowed redirect URL in Entra.
+                    type: string
+                  tenantId:
+                    description: |-
+                      tenantID is a unique string of characters that identifies your
+                      organization's tenant within the Microsoft Entra ID system.
+                    type: string
+                  tokenEndpoint:
+                    description: tokenEndpoint is used for custom endpoints.
+                    type: string
+                required:
+                - applicationId
+                - applicationSecret
+                - endpoint
+                - graphEndpoint
+                - rancherUrl
+                - tenantId
+                type: object
+              enabled:
+                description: enabled indicates that this AuthConfig is used for authenticating
+                  users.
+                type: boolean
+              freeipa:
+                description: freeipa provides configuration for authenticating with
+                  FreeIPA.
+                properties:
+                  certificate:
+                    description: |-
+                      certificate is a PEM-formatted certificate chain - this is needed if the server
+                      you're connecting to presents a non-root-trusted certificate.
+                    type: string
+                  connectionTimeout:
+                    format: int64
+                    type: integer
+                  groupDNAttribute:
+                    type: string
+                  groupMemberMappingAttribute:
+                    type: string
+                  groupMemberUserAttribute:
+                    type: string
+                  groupNameAttribute:
+                    type: string
+                  groupObjectClass:
+                    type: string
+                  groupSearchAttribute:
+                    type: string
+                  groupSearchBase:
+                    type: string
+                  groupSearchFilter:
+                    type: string
+                  nestedGroupMembershipEnabled:
+                    type: boolean
+                  port:
+                    default: 389
+                    description: |-
+                      port is the port to connect to the LDAP server it defaults to 389.
+
+                      Note that it is not possible to communicate with different servers on
+                      different ports.
+                    format: int64
+                    type: integer
+                  searchUsingServiceAccount:
+                    type: boolean
+                  servers:
+                    description: servers is a list of hosts to query.
+                    items:
+                      type: string
+                    type: array
+                  serviceAccountDistinguishedName:
+                    type: string
+                  serviceAccountPassword:
+                    type: string
+                  starttls:
+                    description: |-
+                      starttls indicates that Rancher should initiate a plain-text connection
+                      and negotiate a separate TLS connection with the LDAP server.
+                    type: boolean
+                  tls:
+                    description: |-
+                      tls enables LDAPS (LDAP over TLS) Rancher initiates a TLS connection to
+                      the LDAP server.
+                    type: boolean
+                  userDisabledBitMask:
+                    format: int64
+                    type: integer
+                  userEnabledAttribute:
+                    type: string
+                  userLoginAttribute:
+                    type: string
+                  userLoginFilter:
+                    type: string
+                  userMemberAttribute:
+                    type: string
+                  userNameAttribute:
+                    type: string
+                  userObjectClass:
+                    type: string
+                  userSearchAttribute:
+                    type: string
+                  userSearchBase:
+                    type: string
+                  userSearchFilter:
+                    type: string
+                required:
+                - nestedGroupMembershipEnabled
+                - port
+                - searchUsingServiceAccount
+                - servers
+                type: object
+              github:
+                description: github provides configuration for authenticating with
+                  GitHub OAuth.
+                properties:
+                  additionalClientIds:
+                    additionalProperties:
+                      type: string
+                    description: additionalClientIds is a map of clientID to client
+                      secrets
+                    type: object
+                  clientId:
+                    description: clientId provides the GitHub OAuth App client ID.
+                    type: string
+                  clientSecretRef:
+                    description: |-
+                      clientSecretRef provides the name of a Secret that contains the OAuth App
+                      client secret.
+
+                      The client secret must be in the clientsecret key in the Secret.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                  hostname:
+                    default: github.com
+                    description: |-
+                      hostname is the host to communicate with for initiating the OAuth flow it
+                      defaults to github.com.
+                    type: string
+                  hostnameToClientId:
+                    additionalProperties:
+                      type: string
+                    description: hostnameToClientId is a map of hostname to OAuth
+                      App client ID.
+                    type: object
+                  tls:
+                    default: true
+                    description: |-
+                      tls indicates whether or not Rancher should use TLS to communicate with
+                      the provided hostname.
+                    type: boolean
+                required:
+                - clientId
+                - clientSecretRef
+                - hostname
+                - tls
+                type: object
+              googleoauth:
+                description: googleoauth provides configuration for authenticating
+                  with Google OAuth.
+                properties:
+                  adminEmail:
+                    description: |-
+                      adminEmail is the email of an administrator account from your GSuite setup.
+
+                      In order to perform user and group lookups, Google apis require an
+                      administrator's email in conjunction with the service account key.
+                    type: string
+                  hostname:
+                    description: hostName is the domain on which GSuite is configured.
+                    example: example.com
+                    type: string
+                  nestedGroupMembershipEnabled:
+                    description: |-
+                      nestedGroupMembershipEnabled if enabled indicates that all groups should
+                      be queried in a nested manner.
+                    type: boolean
+                  oauthCredentialRef:
+                    description: |-
+                      oauthCredentialRef provides the name of a Secret that contains the OAuth
+                      credentials provided when creating credentials in the Google Dashboard.
+
+                      The credentials must be in the oauthCredential key in the Secret.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                  serviceAccountCredentialRef:
+                    description: |-
+                      serviceAccountCredentialRef provides the name of a Secret that contains
+                      the Service Account credentials created in the Google Dashboard.
+
+                      The credentials must be in the serviceAccountCredential key in the Secret.
+                    type: string
+                  userInfoEndpoint:
+                    default: https://openidconnect.googleapis.com/v1/userinfo
+                    description: |-
+                      userInfoEndpoint is the API endpoint for getting user information it
+                      defaults to https://openidconnect.googleapis.com/v1/userinfo.
+                    pattern: ^(http|https)://.*$
+                    type: string
+                required:
+                - adminEmail
+                - hostname
+                - oauthCredentialRef
+                - serviceAccountCredentialRef
+                - userInfoEndpoint
+                type: object
+              local:
+                description: local indicates that this should support local authentication.
+                type: object
+              logoutAllSupported:
+                description: |-
+                  logoutAllSupported should be true when the AuthConfig supports
+                  logout-all.
+                type: boolean
+              openldap:
+                description: openldap provides configuration for authenticating with
+                  OpenLDAP.
+                properties:
+                  certificate:
+                    description: |-
+                      certificate is a PEM-formatted certificate chain - this is needed if the server
+                      you're connecting to presents a non-root-trusted certificate.
+                    type: string
+                  connectionTimeout:
+                    format: int64
+                    type: integer
+                  groupDNAttribute:
+                    type: string
+                  groupMemberMappingAttribute:
+                    type: string
+                  groupMemberUserAttribute:
+                    type: string
+                  groupNameAttribute:
+                    type: string
+                  groupObjectClass:
+                    type: string
+                  groupSearchAttribute:
+                    type: string
+                  groupSearchBase:
+                    type: string
+                  groupSearchFilter:
+                    type: string
+                  nestedGroupMembershipEnabled:
+                    type: boolean
+                  port:
+                    default: 389
+                    description: |-
+                      port is the port to connect to the LDAP server it defaults to 389.
+
+                      Note that it is not possible to communicate with different servers on
+                      different ports.
+                    format: int64
+                    type: integer
+                  searchUsingServiceAccount:
+                    type: boolean
+                  servers:
+                    description: servers is a list of hosts to query.
+                    items:
+                      type: string
+                    type: array
+                  serviceAccountDistinguishedName:
+                    type: string
+                  serviceAccountPassword:
+                    type: string
+                  starttls:
+                    description: |-
+                      starttls indicates that Rancher should initiate a plain-text connection
+                      and negotiate a separate TLS connection with the LDAP server.
+                    type: boolean
+                  tls:
+                    description: |-
+                      tls enables LDAPS (LDAP over TLS) Rancher initiates a TLS connection to
+                      the LDAP server.
+                    type: boolean
+                  userDisabledBitMask:
+                    format: int64
+                    type: integer
+                  userEnabledAttribute:
+                    type: string
+                  userLoginAttribute:
+                    type: string
+                  userLoginFilter:
+                    type: string
+                  userMemberAttribute:
+                    type: string
+                  userNameAttribute:
+                    type: string
+                  userObjectClass:
+                    type: string
+                  userSearchAttribute:
+                    type: string
+                  userSearchBase:
+                    type: string
+                  userSearchFilter:
+                    type: string
+                required:
+                - nestedGroupMembershipEnabled
+                - port
+                - searchUsingServiceAccount
+                - servers
+                type: object
+            required:
+            - accessMode
+            type: object
+          status:
+            description: AuthConfigStatus defines the observed state of AuthConfigStatus.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+            type: object
+          type:
+            type: string
+        required:
+        - spec
+        - type
+        type: object
+    served: true
+    storage: true

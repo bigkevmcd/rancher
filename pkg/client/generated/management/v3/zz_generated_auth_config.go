@@ -5,39 +5,59 @@ import (
 )
 
 const (
-	AuthConfigType                     = "authConfig"
-	AuthConfigFieldAccessMode          = "accessMode"
-	AuthConfigFieldAllowedPrincipalIDs = "allowedPrincipalIds"
-	AuthConfigFieldAnnotations         = "annotations"
-	AuthConfigFieldCreated             = "created"
-	AuthConfigFieldCreatorID           = "creatorId"
-	AuthConfigFieldEnabled             = "enabled"
-	AuthConfigFieldLabels              = "labels"
-	AuthConfigFieldLogoutAllSupported  = "logoutAllSupported"
-	AuthConfigFieldName                = "name"
-	AuthConfigFieldOwnerReferences     = "ownerReferences"
-	AuthConfigFieldRemoved             = "removed"
-	AuthConfigFieldStatus              = "status"
-	AuthConfigFieldType                = "type"
-	AuthConfigFieldUUID                = "uuid"
+	AuthConfigType                      = "authConfig"
+	AuthConfigFieldAccessMode           = "accessMode"
+	AuthConfigFieldActiveDirectory      = "activedirectory"
+	AuthConfigFieldAllowedPrincipalIDs  = "allowedPrincipalIds"
+	AuthConfigFieldAnnotations          = "annotations"
+	AuthConfigFieldAzureAD              = "azuread"
+	AuthConfigFieldCreated              = "created"
+	AuthConfigFieldCreatorID            = "creatorId"
+	AuthConfigFieldEnabled              = "enabled"
+	AuthConfigFieldFreeIPA              = "freeipa"
+	AuthConfigFieldGithub               = "github"
+	AuthConfigFieldGoogleOauth          = "googleoauth"
+	AuthConfigFieldLabels               = "labels"
+	AuthConfigFieldLocal                = "local"
+	AuthConfigFieldLogoutAllSupported   = "logoutAllSupported"
+	AuthConfigFieldName                 = "name"
+	AuthConfigFieldOpenLDAP             = "openldap"
+	AuthConfigFieldOwnerReferences      = "ownerReferences"
+	AuthConfigFieldRemoved              = "removed"
+	AuthConfigFieldState                = "state"
+	AuthConfigFieldStatus               = "status"
+	AuthConfigFieldTransitioning        = "transitioning"
+	AuthConfigFieldTransitioningMessage = "transitioningMessage"
+	AuthConfigFieldType                 = "type"
+	AuthConfigFieldUUID                 = "uuid"
 )
 
 type AuthConfig struct {
 	types.Resource
-	AccessMode          string            `json:"accessMode,omitempty" yaml:"accessMode,omitempty"`
-	AllowedPrincipalIDs []string          `json:"allowedPrincipalIds,omitempty" yaml:"allowedPrincipalIds,omitempty"`
-	Annotations         map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
-	Created             string            `json:"created,omitempty" yaml:"created,omitempty"`
-	CreatorID           string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
-	Enabled             bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Labels              map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
-	LogoutAllSupported  bool              `json:"logoutAllSupported,omitempty" yaml:"logoutAllSupported,omitempty"`
-	Name                string            `json:"name,omitempty" yaml:"name,omitempty"`
-	OwnerReferences     []OwnerReference  `json:"ownerReferences,omitempty" yaml:"ownerReferences,omitempty"`
-	Removed             string            `json:"removed,omitempty" yaml:"removed,omitempty"`
-	Status              *AuthConfigStatus `json:"status,omitempty" yaml:"status,omitempty"`
-	Type                string            `json:"type,omitempty" yaml:"type,omitempty"`
-	UUID                string            `json:"uuid,omitempty" yaml:"uuid,omitempty"`
+	AccessMode           string                 `json:"accessMode,omitempty" yaml:"accessMode,omitempty"`
+	ActiveDirectory      *ActiveDirectoryConfig `json:"activedirectory,omitempty" yaml:"activedirectory,omitempty"`
+	AllowedPrincipalIDs  []string               `json:"allowedPrincipalIds,omitempty" yaml:"allowedPrincipalIds,omitempty"`
+	Annotations          map[string]string      `json:"annotations,omitempty" yaml:"annotations,omitempty"`
+	AzureAD              *AzureADConfig         `json:"azuread,omitempty" yaml:"azuread,omitempty"`
+	Created              string                 `json:"created,omitempty" yaml:"created,omitempty"`
+	CreatorID            string                 `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
+	Enabled              bool                   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	FreeIPA              *LdapFields            `json:"freeipa,omitempty" yaml:"freeipa,omitempty"`
+	Github               *GithubConfig          `json:"github,omitempty" yaml:"github,omitempty"`
+	GoogleOauth          *GoogleOauthConfig     `json:"googleoauth,omitempty" yaml:"googleoauth,omitempty"`
+	Labels               map[string]string      `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Local                *LocalAuthConfig       `json:"local,omitempty" yaml:"local,omitempty"`
+	LogoutAllSupported   bool                   `json:"logoutAllSupported,omitempty" yaml:"logoutAllSupported,omitempty"`
+	Name                 string                 `json:"name,omitempty" yaml:"name,omitempty"`
+	OpenLDAP             *LdapFields            `json:"openldap,omitempty" yaml:"openldap,omitempty"`
+	OwnerReferences      []OwnerReference       `json:"ownerReferences,omitempty" yaml:"ownerReferences,omitempty"`
+	Removed              string                 `json:"removed,omitempty" yaml:"removed,omitempty"`
+	State                string                 `json:"state,omitempty" yaml:"state,omitempty"`
+	Status               *AuthConfigStatus      `json:"status,omitempty" yaml:"status,omitempty"`
+	Transitioning        string                 `json:"transitioning,omitempty" yaml:"transitioning,omitempty"`
+	TransitioningMessage string                 `json:"transitioningMessage,omitempty" yaml:"transitioningMessage,omitempty"`
+	Type                 string                 `json:"type,omitempty" yaml:"type,omitempty"`
+	UUID                 string                 `json:"uuid,omitempty" yaml:"uuid,omitempty"`
 }
 
 type AuthConfigCollection struct {

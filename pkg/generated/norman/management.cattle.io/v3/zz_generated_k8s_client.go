@@ -29,7 +29,6 @@ type Interface interface {
 	PrincipalsGetter
 	UsersGetter
 	AuthConfigsGetter
-	LdapConfigsGetter
 	TokensGetter
 	DynamicSchemasGetter
 	PreferencesGetter
@@ -325,20 +324,6 @@ func (c *Client) AuthConfigs(namespace string) AuthConfigInterface {
 	sharedClient := c.clientFactory.ForResourceKind(AuthConfigGroupVersionResource, AuthConfigGroupVersionKind.Kind, false)
 	objectClient := objectclient.NewObjectClient(namespace, sharedClient, &AuthConfigResource, AuthConfigGroupVersionKind, authConfigFactory{})
 	return &authConfigClient{
-		ns:           namespace,
-		client:       c,
-		objectClient: objectClient,
-	}
-}
-
-type LdapConfigsGetter interface {
-	LdapConfigs(namespace string) LdapConfigInterface
-}
-
-func (c *Client) LdapConfigs(namespace string) LdapConfigInterface {
-	sharedClient := c.clientFactory.ForResourceKind(LdapConfigGroupVersionResource, LdapConfigGroupVersionKind.Kind, false)
-	objectClient := objectclient.NewObjectClient(namespace, sharedClient, &LdapConfigResource, LdapConfigGroupVersionKind, ldapConfigFactory{})
-	return &ldapConfigClient{
 		ns:           namespace,
 		client:       c,
 		objectClient: objectClient,

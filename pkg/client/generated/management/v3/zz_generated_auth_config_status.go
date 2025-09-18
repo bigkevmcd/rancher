@@ -6,5 +6,5 @@ const (
 )
 
 type AuthConfigStatus struct {
-	Conditions []AuthConfigConditions `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }

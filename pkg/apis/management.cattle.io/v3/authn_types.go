@@ -241,49 +241,366 @@ type SetPasswordInput struct {
 }
 
 // +genclient
-// +kubebuilder:skipversion
 // +genclient:nonNamespaced
+// +kubebuilder:resource:scope=Cluster
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type AuthConfig struct {
 	metav1.TypeMeta   `json:",inline" mapstructure:",squash"`
 	metav1.ObjectMeta `json:"metadata,omitempty" mapstructure:"metadata"`
 
-	Type                string   `json:"type" norman:"noupdate"`
-	Enabled             bool     `json:"enabled,omitempty"`
-	AccessMode          string   `json:"accessMode,omitempty" norman:"required,notnullable,type=enum,options=required|restricted|unrestricted"`
-	AllowedPrincipalIDs []string `json:"allowedPrincipalIds,omitempty" norman:"type=array[reference[principal]]"`
+	// TODO: deprecated
+	Type string `json:"type" norman:"noupdate"`
 
-	// Flag. True when the auth provider supports a `Logout All` operation.
-	// Currently only the SAML providers do, with their `Single Log Out` flow.
+	Spec AuthConfigSpec `json:"spec"`
+
+	Status AuthConfigStatus `json:"status,omitempty"`
+}
+
+// AuthConfigStatus defines the observed state of AuthConfigStatus.
+type AuthConfigStatus struct {
+	// +listType=map
+	// +listMapKey=type
+	// +patchStrategy=merge
+	// +patchMergeKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,opt,name=conditions"`
+}
+
+// AuthConfigSpec defines the desired state of AuthConfig
+type AuthConfigSpec struct {
+	// enabled indicates that this AuthConfig is used for authenticating users.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// accessMode controls which users can login to a Rancher installation:
+	//
+	// Possible enum values:
+	// - `"unrestricted"` means that any valid user account within the configured authentication provider can log in.
+	// - `"restricted"` means that access is limited to a predefined set of users and groups listed in the allowedPrincipalIDs parameter. Additionally, anyone who is also a member of a specific Environment (or project in the API) can log in.
+	// - `"required"` is the strictest mode, requiring that users must be present in the allowedIdentities list to log in.
+	//
+	// +kubebuilder:validation:Enum=required;restricted;unrestricted
+	// +required
+	AccessMode string `json:"accessMode,omitempty"`
+
+	// allowedPrincipalIDs works in conjunction with the accessMode.
+	//
+	// If populated the IDs must reference principals e.g. github_user://1
+	//
+	// +kubebuilder:example="github_user://1"
+	// +optional
+	AllowedPrincipalIDs []string `json:"allowedPrincipalIds,omitempty"`
+
+	// logoutAllSupported should be true when the AuthConfig supports
+	// logout-all.
+	// +optional
 	LogoutAllSupported bool `json:"logoutAllSupported,omitempty"`
 
-	Status AuthConfigStatus `json:"status"`
+	// local indicates that this should support local authentication.
+	// +optional
+	Local *LocalAuthConfig `json:"local,omitempty"`
+
+	// github provides configuration for authenticating with GitHub OAuth.
+	// +optional
+	Github *GithubConfig `json:"github,omitempty"`
+
+	// googleoauth provides configuration for authenticating with Google OAuth.
+	// +optional
+	GoogleOauth *GoogleOauthConfig `json:"googleoauth,omitempty"`
+
+	// azuread provides configuration for authenticating with Microsoft Entra
+	// (formerly Azure AD).
+	// +optional
+	AzureAD *AzureADConfig `json:"azuread,omitempty"`
+
+	// activedirectory provides configuration for authenticating with Microsoft
+	// Active Directory.
+	// +optional
+	ActiveDirectory *ActiveDirectoryConfig `json:"activedirectory,omitempty"`
+
+	// openldap provides configuration for authenticating with OpenLDAP.
+	// +optional
+	OpenLDAP *LdapFields `json:"openldap,omitempty"`
+
+	// freeipa provides configuration for authenticating with FreeIPA.
+	//
+	// TODO: This will need to be different for FreeIPA - the defaults are
+	// different.
+	//
+	// +optional
+	FreeIPA *LdapFields `json:"freeipa,omitempty"`
 }
 
-type AuthConfigStatus struct {
-	Conditions []AuthConfigConditions `json:"conditions"`
+// LocalAuthConfig provides configuration the Local authentication.
+type LocalAuthConfig struct {
 }
 
-type AuthConfigConditions struct {
-	// Type of condition
-	Type condition.Cond `json:"type"`
-
-	// Status of condition (one of True, False, Unknown)
-	Status v1.ConditionStatus `json:"status"`
-
-	// Last time the condition was updated
-	LastUpdateTime string `json:"lastUpdateTime,omitempty"`
-
-	// Last time the condition transitioned from one status to another
-	LastTransitionTime string `json:"lastTransitionTime,omitempty"`
-
-	// The reason for the condition's last transition
-	Reason string `json:"reason,omitempty"`
-
-	// Human-readable message indicating details about last transition
-	Message string `json:"message,omitempty"`
+// SecretReference points to a Secret with both a Namespace and Name.
+type SecretReference struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
+
+// GithubConfig provides configuration for authenticating via GitHub OAuth app.
+type GithubConfig struct {
+	// hostname is the host to communicate with for initiating the OAuth flow it
+	// defaults to github.com.
+	//
+	// +kubebuilder:default="github.com"
+	// +required
+	Hostname string `json:"hostname,omitempty"`
+
+	// tls indicates whether or not Rancher should use TLS to communicate with
+	// the provided hostname.
+	//
+	// +kubebuilder:default=true
+	// +required
+	TLS bool `json:"tls,omitempty"`
+
+	// clientId provides the GitHub OAuth App client ID.
+	//
+	// +kubebuilder:validation:Required
+	ClientID string `json:"clientId,omitempty"`
+
+	// clientSecretRef provides the name of a Secret that contains the OAuth App
+	// client secret.
+	//
+	// The client secret must be in the clientsecret key in the Secret.
+	//
+	// +required
+	ClientSecretRef *SecretReference `json:"clientSecretRef,omitempty"`
+
+	// additionalClientIds is a map of clientID to client secrets
+	//
+	// +optional
+	AdditionalClientIDs map[string]string `json:"additionalClientIds,omitempty"`
+
+	// hostnameToClientId is a map of hostname to OAuth App client ID.
+	//
+	// +optional
+	HostnameToClientID map[string]string `json:"hostnameToClientId,omitempty"`
+}
+
+// GoogleOauthConfig provides configuration for authenticating with Google
+// OAuth.
+type GoogleOauthConfig struct {
+	// adminEmail is the email of an administrator account from your GSuite setup.
+	//
+	// In order to perform user and group lookups, Google apis require an
+	// administrator's email in conjunction with the service account key.
+	//
+	// +required
+	AdminEmail string `json:"adminEmail"`
+
+	// hostName is the domain on which GSuite is configured.
+	//
+	// +kubebuilder:example="example.com"
+	// +required
+	Hostname string `json:"hostname"`
+
+	// userInfoEndpoint is the API endpoint for getting user information it
+	// defaults to https://openidconnect.googleapis.com/v1/userinfo.
+	//
+	// +kubebuilder:default="https://openidconnect.googleapis.com/v1/userinfo"
+	// +kubebuilder:validation:Pattern="^(http|https)://.*$"
+	// +required
+	UserInfoEndpoint string `json:"userInfoEndpoint"`
+
+	// nestedGroupMembershipEnabled if enabled indicates that all groups should
+	// be queried in a nested manner.
+	// +optional
+	NestedGroupMembershipEnabled bool `json:"nestedGroupMembershipEnabled"`
+
+	// oauthCredentialRef provides the name of a Secret that contains the OAuth
+	// credentials provided when creating credentials in the Google Dashboard.
+	//
+	// The credentials must be in the oauthCredential key in the Secret.
+	// +required
+	OauthCredentialRef *SecretReference `json:"oauthCredentialRef,omitempty"`
+
+	// serviceAccountCredentialRef provides the name of a Secret that contains
+	// the Service Account credentials created in the Google Dashboard.
+	//
+	// The credentials must be in the serviceAccountCredential key in the Secret.
+	// +required
+	ServiceAccountCredentialRef string `json:"serviceAccountCredentialRef,omitempty"`
+}
+
+// AzureADConfig provides configuration for authenticating with Microsoft Entra
+// (formerly Azure AD).
+type AzureADConfig struct {
+	// tenantID is a unique string of characters that identifies your
+	// organization's tenant within the Microsoft Entra ID system.
+	// +required
+	TenantID string `json:"tenantId,omitempty"`
+
+	// TODO: Write these up
+
+	// +required
+	ApplicationID string `json:"applicationId"`
+
+	// TODO: Modify to a ref
+	// +required
+	ApplicationSecret string `json:"applicationSecret,omitempty" norman:"required,type=password"`
+
+	// endpoint is the endpoint for communicating with Entra it defaults to
+	// https://login.microsoftonline.com/.
+	//
+	// +kubebuilder:default="https://login.microsoftonline.com/"
+	// +kubebuilder:validation:Pattern="^https://.*$"
+	// +required
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// graphEndpoint is the endpoint for communicating with the Entra Graph API
+	// it defaults to https://graph.microsoft.com.
+	//
+	// +kubeuilder:default="https://graph.microsoft.com"
+	// +kubebuilder:validation:Pattern="^https://.*$"
+	// +required
+	GraphEndpoint string `json:"graphEndpoint,omitempty"`
+
+	// rancherUrl is the redirect URL sent to Entra to redirect the user to
+	// after authentication.
+	//
+	// This must be an allowed redirect URL in Entra.
+	//
+	// +required
+	RancherURL string `json:"rancherUrl,omitempty"`
+
+	// groupMembershipFilter allows filtering of the groups that are returned by
+	// Azure the filter is applied on the server-side.
+	//
+	// This uses the OData filtering language.
+	//
+	// +optional
+	GroupMembershipFilter string `json:"groupMembershipFilter,omitempty"`
+
+	// tokenEndpoint is used for custom endpoints.
+	// +optional
+	TokenEndpoint string `json:"tokenEndpoint,omitempty"`
+
+	// authEndpoint is used for custom endpoints.
+	// +optional
+	AuthEndpoint string `json:"authEndpoint,omitempty"`
+
+	// TODO: document
+	DeviceAuthEndpoint string `json:"deviceAuthEndpoint,omitempty"`
+}
+
+// ActiveDirectoryConfig provides configuration for authenticating via an Active
+// Directory LDAP Server.
+type ActiveDirectoryConfig struct {
+	// servers is a list of hosts to query
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +required
+	Servers []string `json:"servers"`
+
+	// port is the port to connect to the Active Directory server it defaults to
+	// 389.
+	//
+	// Note that it is not possible to communicate with different servers on
+	// different ports.
+	// +kubebuilder:default=389
+	// +required
+	Port int64 `json:"port"`
+
+	// tls enables LDAPS (LDAP over TLS) Rancher initiates a TLS connection to
+	// the Active Directory server.
+	//
+	// +optional
+	TLS bool `json:"tls,omitempty"`
+
+	// starttls indicates that Rancher should initiate a plain-text connection
+	// and negotiate a separate TLS connection with the Active Directory server.
+	//
+	// +optional
+	StartTLS bool `json:"starttls,omitempty"`
+
+	// certificate is a PEM-formatted certificate chain - this is needed if the server
+	// you're connecting to presents a non-root-trusted certificate.
+	//
+	// +optional
+	Certificate string `json:"certificate,omitempty"`
+
+	// defaultLoginDomain can be configured with the NetBIOS name of your AD
+	// domain, usernames entered without a domain (e.g. "jdoe") will
+	// automatically be converted to a slashed, NetBIOS logon (e.g.
+	// "LOGIN_DOMAIN\jdoe") when binding to the AD server.
+	//
+	// If your users authenticate with the UPN (e.g. "jdoe@acme.com") as username then this field must be left empty.
+	//
+	// +optional
+	DefaultLoginDomain string `json:"defaultLoginDomain,omitempty"`
+
+	ServiceAccountUsername string `json:"serviceAccountUsername,omitempty"      norman:"required"`
+	ServiceAccountPassword string `json:"serviceAccountPassword,omitempty"      norman:"type=password,required"`
+
+	// userEnabledAttribute is the attribute containing an integer value
+	// representing a bitwise enumeration of user account flags.
+	//
+	// Rancher uses this to determine if a user account is disabled. You should
+	// normally leave this set to the AD standard userAccountControl.
+	//
+	// +kubebuilder:default="userAccountControl"
+	// +required
+	UserEnabledAttribute string `json:"userEnabledAttribute"`
+
+	// userDisabledBitmask configures a bitmask for the userEnabledAttribute to
+	// detect when a user is disabled.
+	//
+	// +kubebuilder:default=2
+	// +required
+	UserDisabledBitMask int64 `json:"userDisabledBitMask"`
+
+	// TODO
+	//
+	// +required
+	UserSearchBase string `json:"userSearchBase"`
+
+	// userSearchAttribute is used in the query for users as the fields to
+	// search for query strings - the default is "sAMAccountName|sn|givenName"
+	//
+	// +kubebuilder:default="sAMAccountName|sn|givenName"
+	// +required
+	UserSearchAttribute string `json:"userSearchAttribute,omitempty"         norman:"default=sAMAccountName|sn|givenName,required"`
+
+	// +optional
+	UserSearchFilter string `json:"userSearchFilter"`
+
+	// connectionTimeout is the maximum amount of time (in ms) to wait for a
+	// connection to one of the servers to be established - the default is
+	// 5000ms.
+	//
+	// +kubebuilder:default=5000
+	// +required
+	ConnectionTimeout int64 `json:"connectionTimeout,omitempty"`
+
+	// TODO
+	UserLoginAttribute           string `json:"userLoginAttribute,omitempty"          norman:"default=sAMAccountName,required"`
+	UserObjectClass              string `json:"userObjectClass,omitempty"             norman:"default=person,required"`
+	UserNameAttribute            string `json:"userNameAttribute,omitempty"           norman:"default=name,required"`
+	UserLoginFilter              string `json:"userLoginFilter,omitempty"`
+	GroupSearchBase              string `json:"groupSearchBase,omitempty"`
+	GroupSearchAttribute         string `json:"groupSearchAttribute,omitempty"        norman:"default=sAMAccountName,required"`
+	GroupSearchFilter            string `json:"groupSearchFilter,omitempty"`
+	GroupObjectClass             string `json:"groupObjectClass,omitempty"            norman:"default=group,required"`
+	GroupNameAttribute           string `json:"groupNameAttribute,omitempty"          norman:"default=name,required"`
+	GroupDNAttribute             string `json:"groupDNAttribute,omitempty"            norman:"default=distinguishedName,required"`
+	GroupMemberUserAttribute     string `json:"groupMemberUserAttribute,omitempty"    norman:"default=distinguishedName,required"`
+	GroupMemberMappingAttribute  string `json:"groupMemberMappingAttribute,omitempty" norman:"default=member,required"`
+	NestedGroupMembershipEnabled *bool  `json:"nestedGroupMembershipEnabled,omitempty" norman:"default=false"`
+}
+
+type LdapTestAndApplyInput struct {
+	LdapConfig `json:"ldapConfig,omitempty"`
+	Username   string `json:"username"`
+	Password   string `json:"password" norman:"type=password,required"`
+}
+
+type OpenLdapTestAndApplyInput = LdapTestAndApplyInput
+type FreeIpaTestAndApplyInput = LdapTestAndApplyInput
 
 // +genclient
 // +kubebuilder:skipversion
@@ -300,121 +617,6 @@ type SamlToken struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type LocalConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
-}
-
-// +genclient
-// +kubebuilder:skipversion
-// +genclient:nonNamespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type GithubConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
-
-	Hostname     string `json:"hostname,omitempty" norman:"default=github.com" norman:"required"`
-	TLS          bool   `json:"tls,omitempty" norman:"notnullable,default=true" norman:"required"`
-	ClientID     string `json:"clientId,omitempty" norman:"required"`
-	ClientSecret string `json:"clientSecret,omitempty" norman:"required,type=password"`
-
-	// AdditionalClientIDs is a map of clientID to client secrets
-	AdditionalClientIDs map[string]string `json:"additionalClientIds,omitempty" norman:"nocreate,noupdate"`
-	HostnameToClientID  map[string]string `json:"hostnameToClientId,omitempty" norman:"nocreate,noupdate"`
-}
-
-type GithubConfigTestOutput struct {
-	RedirectURL string `json:"redirectUrl"`
-}
-
-type GithubConfigApplyInput struct {
-	GithubConfig GithubConfig `json:"githubConfig,omitempty"`
-	Code         string       `json:"code,omitempty"`
-	Enabled      bool         `json:"enabled,omitempty"`
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type GoogleOauthConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
-
-	OauthCredential              string `json:"oauthCredential,omitempty" norman:"required,type=password,notnullable"`
-	ServiceAccountCredential     string `json:"serviceAccountCredential,omitempty" norman:"required,type=password,notnullable"`
-	AdminEmail                   string `json:"adminEmail,omitempty" norman:"required,notnullable"`
-	Hostname                     string `json:"hostname,omitempty" norman:"required,notnullable,noupdate"`
-	UserInfoEndpoint             string `json:"userInfoEndpoint" norman:"default=https://openidconnect.googleapis.com/v1/userinfo,required,notnullable"`
-	NestedGroupMembershipEnabled bool   `json:"nestedGroupMembershipEnabled"    norman:"default=false"`
-}
-
-type GoogleOauthConfigTestOutput struct {
-	RedirectURL string `json:"redirectUrl"`
-}
-
-type GoogleOauthConfigApplyInput struct {
-	GoogleOauthConfig GoogleOauthConfig `json:"googleOauthConfig,omitempty"`
-	Code              string            `json:"code,omitempty"`
-	Enabled           bool              `json:"enabled,omitempty"`
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type AzureADConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
-
-	Endpoint              string `json:"endpoint,omitempty" norman:"default=https://login.microsoftonline.com/,required,notnullable"`
-	GraphEndpoint         string `json:"graphEndpoint,omitempty" norman:"required,notnullable"`
-	TokenEndpoint         string `json:"tokenEndpoint,omitempty" norman:"required,notnullable"`
-	AuthEndpoint          string `json:"authEndpoint,omitempty" norman:"required,notnullable"`
-	DeviceAuthEndpoint    string `json:"deviceAuthEndpoint,omitempty"`
-	TenantID              string `json:"tenantId,omitempty" norman:"required,notnullable"`
-	ApplicationID         string `json:"applicationId,omitempty" norman:"required,notnullable"`
-	ApplicationSecret     string `json:"applicationSecret,omitempty" norman:"required,type=password"`
-	RancherURL            string `json:"rancherUrl,omitempty" norman:"required,notnullable"`
-	GroupMembershipFilter string `json:"groupMembershipFilter,omitempty"`
-}
-
-type AzureADConfigTestOutput struct {
-	RedirectURL string `json:"redirectUrl"`
-}
-
-type AzureADConfigApplyInput struct {
-	Config AzureADConfig `json:"config,omitempty"`
-	Code   string        `json:"code,omitempty"`
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type ActiveDirectoryConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
-
-	Servers                      []string `json:"servers,omitempty"                     norman:"type=array[string],required"`
-	Port                         int64    `json:"port,omitempty"                        norman:"default=389"`
-	TLS                          bool     `json:"tls,omitempty"                         norman:"default=false"`
-	StartTLS                     bool     `json:"starttls,omitempty"                    norman:"default=false"`
-	Certificate                  string   `json:"certificate,omitempty"`
-	DefaultLoginDomain           string   `json:"defaultLoginDomain,omitempty"`
-	ServiceAccountUsername       string   `json:"serviceAccountUsername,omitempty"      norman:"required"`
-	ServiceAccountPassword       string   `json:"serviceAccountPassword,omitempty"      norman:"type=password,required"`
-	UserDisabledBitMask          int64    `json:"userDisabledBitMask,omitempty"         norman:"default=2"`
-	UserSearchBase               string   `json:"userSearchBase,omitempty"              norman:"required"`
-	UserSearchAttribute          string   `json:"userSearchAttribute,omitempty"         norman:"default=sAMAccountName|sn|givenName,required"`
-	UserSearchFilter             string   `json:"userSearchFilter,omitempty"`
-	UserLoginAttribute           string   `json:"userLoginAttribute,omitempty"          norman:"default=sAMAccountName,required"`
-	UserObjectClass              string   `json:"userObjectClass,omitempty"             norman:"default=person,required"`
-	UserNameAttribute            string   `json:"userNameAttribute,omitempty"           norman:"default=name,required"`
-	UserEnabledAttribute         string   `json:"userEnabledAttribute,omitempty"        norman:"default=userAccountControl,required"`
-	UserLoginFilter              string   `json:"userLoginFilter,omitempty"`
-	GroupSearchBase              string   `json:"groupSearchBase,omitempty"`
-	GroupSearchAttribute         string   `json:"groupSearchAttribute,omitempty"        norman:"default=sAMAccountName,required"`
-	GroupSearchFilter            string   `json:"groupSearchFilter,omitempty"`
-	GroupObjectClass             string   `json:"groupObjectClass,omitempty"            norman:"default=group,required"`
-	GroupNameAttribute           string   `json:"groupNameAttribute,omitempty"          norman:"default=name,required"`
-	GroupDNAttribute             string   `json:"groupDNAttribute,omitempty"            norman:"default=distinguishedName,required"`
-	GroupMemberUserAttribute     string   `json:"groupMemberUserAttribute,omitempty"    norman:"default=distinguishedName,required"`
-	GroupMemberMappingAttribute  string   `json:"groupMemberMappingAttribute,omitempty" norman:"default=member,required"`
-	ConnectionTimeout            int64    `json:"connectionTimeout,omitempty"           norman:"default=5000,notnullable,required"`
-	NestedGroupMembershipEnabled *bool    `json:"nestedGroupMembershipEnabled,omitempty" norman:"default=false"`
-}
 
 func (c *ActiveDirectoryConfig) GetUserSearchAttributes(searchAttributes ...string) []string {
 	userSearchAttributes := []string{
@@ -444,40 +646,77 @@ type ActiveDirectoryTestAndApplyInput struct {
 }
 
 type LdapFields struct {
-	Servers                         []string `json:"servers,omitempty"                         norman:"type=array[string],notnullable,required"`
-	Port                            int64    `json:"port,omitempty"                            norman:"default=389,notnullable,required"`
-	TLS                             bool     `json:"tls,omitempty"                             norman:"default=false,notnullable,required"`
-	StartTLS                        bool     `json:"starttls,omitempty"                        norman:"default=false"`
-	Certificate                     string   `json:"certificate,omitempty"`
-	ServiceAccountDistinguishedName string   `json:"serviceAccountDistinguishedName,omitempty" norman:"required"`
-	ServiceAccountPassword          string   `json:"serviceAccountPassword,omitempty"          norman:"type=password,required"`
-	UserDisabledBitMask             int64    `json:"userDisabledBitMask,omitempty"`
-	UserSearchBase                  string   `json:"userSearchBase,omitempty"                  norman:"notnullable,required"`
-	UserSearchAttribute             string   `json:"userSearchAttribute,omitempty"             norman:"default=uid|sn|givenName,notnullable,required"`
-	UserSearchFilter                string   `json:"userSearchFilter,omitempty"`
-	UserLoginAttribute              string   `json:"userLoginAttribute,omitempty"              norman:"default=uid,notnullable,required"`
-	UserObjectClass                 string   `json:"userObjectClass,omitempty"                 norman:"default=inetOrgPerson,notnullable,required"`
-	UserNameAttribute               string   `json:"userNameAttribute,omitempty"               norman:"default=cn,notnullable,required"`
-	UserMemberAttribute             string   `json:"userMemberAttribute,omitempty"             norman:"default=memberOf,notnullable,required"`
-	UserEnabledAttribute            string   `json:"userEnabledAttribute,omitempty"`
-	UserLoginFilter                 string   `json:"userLoginFilter,omitempty"`
-	GroupSearchBase                 string   `json:"groupSearchBase,omitempty"`
-	GroupSearchAttribute            string   `json:"groupSearchAttribute,omitempty"            norman:"default=cn,notnullable,required"`
-	GroupSearchFilter               string   `json:"groupSearchFilter,omitempty"`
-	GroupObjectClass                string   `json:"groupObjectClass,omitempty"                norman:"default=groupOfNames,notnullable,required"`
-	GroupNameAttribute              string   `json:"groupNameAttribute,omitempty"              norman:"default=cn,notnullable,required"`
-	GroupDNAttribute                string   `json:"groupDNAttribute,omitempty"                norman:"default=entryDN,notnullable"`
-	GroupMemberUserAttribute        string   `json:"groupMemberUserAttribute,omitempty"        norman:"default=entryDN,notnullable"`
-	GroupMemberMappingAttribute     string   `json:"groupMemberMappingAttribute,omitempty"     norman:"default=member,notnullable,required"`
-	ConnectionTimeout               int64    `json:"connectionTimeout,omitempty"               norman:"default=5000,notnullable,required"`
-	NestedGroupMembershipEnabled    bool     `json:"nestedGroupMembershipEnabled"              norman:"default=false"`
-	SearchUsingServiceAccount       bool     `json:"searchUsingServiceAccount"       norman:"default=false"`
+	// servers is a list of hosts to query.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +required
+	Servers []string `json:"servers"`
+
+	// port is the port to connect to the LDAP server it defaults to 389.
+	//
+	// Note that it is not possible to communicate with different servers on
+	// different ports.
+	// +kubebuilder:default=389
+	// +required
+	Port int64 `json:"port"`
+
+	// tls enables LDAPS (LDAP over TLS) Rancher initiates a TLS connection to
+	// the LDAP server.
+	//
+	// +optional
+	TLS bool `json:"tls,omitempty"`
+
+	// starttls indicates that Rancher should initiate a plain-text connection
+	// and negotiate a separate TLS connection with the LDAP server.
+	//
+	// +optional
+	StartTLS bool `json:"starttls,omitempty"`
+
+	// certificate is a PEM-formatted certificate chain - this is needed if the server
+	// you're connecting to presents a non-root-trusted certificate.
+	//
+	// +optional
+	Certificate string `json:"certificate,omitempty"`
+
+	// connectionTimeout is the maximum amount of time (in ms) to wait for a
+	// connection to one of the servers to be established - the default is
+	// 5000ms.
+	//
+	// +kubebuilder:default=5000
+	// +required
+	ConnectionTimeout int64 `json:"connectionTimeout,omitempty"`
+
+	// serviceAccountDistinguishedName is the DN to connect to the LDAP server
+	// with.
+	//
+	// +required
+	ServiceAccountDistinguishedName string `json:"serviceAccountDistinguishedName,omitempty"`
+	ServiceAccountPassword          string `json:"serviceAccountPassword,omitempty"          norman:"type=password,required"`
+
+	UserDisabledBitMask int64 `json:"userDisabledBitMask,omitempty"`
+
+	UserSearchBase               string `json:"userSearchBase,omitempty"                  norman:"notnullable,required"`
+	UserSearchAttribute          string `json:"userSearchAttribute,omitempty"             norman:"default=uid|sn|givenName,notnullable,required"`
+	UserSearchFilter             string `json:"userSearchFilter,omitempty"`
+	UserLoginAttribute           string `json:"userLoginAttribute,omitempty"              norman:"default=uid,notnullable,required"`
+	UserObjectClass              string `json:"userObjectClass,omitempty"                 norman:"default=inetOrgPerson,notnullable,required"`
+	UserNameAttribute            string `json:"userNameAttribute,omitempty"               norman:"default=cn,notnullable,required"`
+	UserMemberAttribute          string `json:"userMemberAttribute,omitempty"             norman:"default=memberOf,notnullable,required"`
+	UserEnabledAttribute         string `json:"userEnabledAttribute,omitempty"`
+	UserLoginFilter              string `json:"userLoginFilter,omitempty"`
+	GroupSearchBase              string `json:"groupSearchBase,omitempty"`
+	GroupSearchAttribute         string `json:"groupSearchAttribute,omitempty"            norman:"default=cn,notnullable,required"`
+	GroupSearchFilter            string `json:"groupSearchFilter,omitempty"`
+	GroupObjectClass             string `json:"groupObjectClass,omitempty"                norman:"default=groupOfNames,notnullable,required"`
+	GroupNameAttribute           string `json:"groupNameAttribute,omitempty"              norman:"default=cn,notnullable,required"`
+	GroupDNAttribute             string `json:"groupDNAttribute,omitempty"                norman:"default=entryDN,notnullable"`
+	GroupMemberUserAttribute     string `json:"groupMemberUserAttribute,omitempty"        norman:"default=entryDN,notnullable"`
+	GroupMemberMappingAttribute  string `json:"groupMemberMappingAttribute,omitempty"     norman:"default=member,notnullable,required"`
+	NestedGroupMembershipEnabled bool   `json:"nestedGroupMembershipEnabled"              norman:"default=false"`
+	SearchUsingServiceAccount    bool   `json:"searchUsingServiceAccount"       norman:"default=false"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 type LdapConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
 	LdapFields `json:",inline" mapstructure:",squash"`
 }
 
@@ -504,28 +743,6 @@ func (c *LdapConfig) GetGroupSearchAttributes(searchAttributes ...string) []stri
 	return append(groupSeachAttributes, searchAttributes...)
 }
 
-type LdapTestAndApplyInput struct {
-	LdapConfig `json:"ldapConfig,omitempty"`
-	Username   string `json:"username"`
-	Password   string `json:"password" norman:"type=password,required"`
-}
-
-type OpenLdapConfig struct {
-	LdapConfig `json:",inline" mapstructure:",squash"`
-}
-
-type OpenLdapTestAndApplyInput struct {
-	LdapTestAndApplyInput `json:",inline" mapstructure:",squash"`
-}
-
-type FreeIpaConfig struct {
-	LdapConfig `json:",inline" mapstructure:",squash"`
-}
-
-type FreeIpaTestAndApplyInput struct {
-	LdapTestAndApplyInput `json:",inline" mapstructure:",squash"`
-}
-
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type SamlConfig struct {
@@ -550,6 +767,35 @@ type SamlConfig struct {
 	UIDField           string `json:"uidField"           norman:"required"`
 	RancherAPIHost     string `json:"rancherApiHost"     norman:"required"`
 	EntityID           string `json:"entityID"`
+}
+
+type GithubConfigTestOutput struct {
+	RedirectURL string `json:"redirectUrl"`
+}
+
+type GithubConfigApplyInput struct {
+	GithubConfig GithubConfig `json:"githubConfig,omitempty"`
+	Code         string       `json:"code,omitempty"`
+	Enabled      bool         `json:"enabled,omitempty"`
+}
+
+type GoogleOauthConfigTestOutput struct {
+	RedirectURL string `json:"redirectUrl"`
+}
+
+type GoogleOauthConfigApplyInput struct {
+	GoogleOauthConfig GoogleOauthConfig `json:"googleOauthConfig,omitempty"`
+	Code              string            `json:"code,omitempty"`
+	Enabled           bool              `json:"enabled,omitempty"`
+}
+
+type AzureADConfigTestOutput struct {
+	RedirectURL string `json:"redirectUrl"`
+}
+
+type AzureADConfigApplyInput struct {
+	Config AzureADConfig `json:"config,omitempty"`
+	Code   string        `json:"code,omitempty"`
 }
 
 type SamlConfigTestInput struct {

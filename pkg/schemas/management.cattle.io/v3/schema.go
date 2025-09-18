@@ -396,108 +396,16 @@ func authnTypes(schemas *types.Schemas) *types.Schemas {
 		MustImportAndCustomize(&Version, v3.AuthConfig{}, func(schema *types.Schema) {
 			schema.CollectionMethods = []string{http.MethodGet}
 		}).
-		// Local Config
-		MustImportAndCustomize(&Version, v3.LocalConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet}
-		}).
-		//Github Config
-		MustImportAndCustomize(&Version, v3.GithubConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.ResourceActions = map[string]types.Action{
-				"disable": {},
-				"configureTest": {
-					Input:  "githubConfig",
-					Output: "githubConfigTestOutput",
-				},
-				"testAndApply": {
-					Input: "githubConfigApplyInput",
-				},
-			}
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet, http.MethodPut}
-		}).
+		// GitHub OAuth Config
 		MustImport(&Version, v3.GithubConfigTestOutput{}).
 		MustImport(&Version, v3.GithubConfigApplyInput{}).
-		//AzureAD Config
-		MustImportAndCustomize(&Version, v3.AzureADConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.ResourceActions = map[string]types.Action{
-				"disable": {},
-				"configureTest": {
-					Input:  "azureADConfig",
-					Output: "azureADConfigTestOutput",
-				},
-				"testAndApply": {
-					Input: "azureADConfigApplyInput",
-				},
-				"upgrade": {},
-			}
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet, http.MethodPut}
-		}).
+		// Entra (Azure AD) Config
 		MustImport(&Version, v3.AzureADConfigTestOutput{}).
 		MustImport(&Version, v3.AzureADConfigApplyInput{}).
 		// Active Directory Config
-		MustImportAndCustomize(&Version, v3.ActiveDirectoryConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.ResourceActions = map[string]types.Action{
-				"disable": {},
-				"testAndApply": {
-					Input: "activeDirectoryTestAndApplyInput",
-				},
-			}
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet, http.MethodPut}
-		}).
 		MustImport(&Version, v3.ActiveDirectoryTestAndApplyInput{}).
-		// OpenLdap Config
-		MustImportAndCustomize(&Version, v3.OpenLdapConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.ResourceActions = map[string]types.Action{
-				"disable": {},
-				"testAndApply": {
-					Input: "openLdapTestAndApplyInput",
-				},
-			}
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet, http.MethodPut}
-		}).
 		MustImport(&Version, v3.OpenLdapTestAndApplyInput{}).
 		// FreeIpa Config
-		AddMapperForType(&Version, v3.FreeIpaConfig{}, m.Drop{Field: "nestedGroupMembershipEnabled"}).
-		MustImportAndCustomize(&Version, v3.FreeIpaConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.ResourceActions = map[string]types.Action{
-				"disable": {},
-				"testAndApply": {
-					Input: "freeIpaTestAndApplyInput",
-				},
-			}
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet, http.MethodPut}
-			schema.MustCustomizeField("groupObjectClass", func(f types.Field) types.Field {
-				f.Default = "groupofnames"
-				return f
-			})
-			schema.MustCustomizeField("userNameAttribute", func(f types.Field) types.Field {
-				f.Default = "givenName"
-				return f
-			})
-			schema.MustCustomizeField("userObjectClass", func(f types.Field) types.Field {
-				f.Default = "inetorgperson"
-				return f
-			})
-			schema.MustCustomizeField("groupDNAttribute", func(f types.Field) types.Field {
-				f.Default = "entrydn"
-				return f
-			})
-			schema.MustCustomizeField("groupMemberUserAttribute", func(f types.Field) types.Field {
-				f.Default = "entrydn"
-				return f
-			})
-		}).
 		MustImport(&Version, v3.FreeIpaTestAndApplyInput{}).
 		// Saml Configs (ping adfs, keycloak, okta, shibboleth)
 		MustImportAndCustomize(&Version, v3.PingConfig{}, configSchema).
@@ -507,22 +415,6 @@ func authnTypes(schemas *types.Schemas) *types.Schemas {
 		MustImportAndCustomize(&Version, v3.ShibbolethConfig{}, configSchema).
 		MustImport(&Version, v3.SamlConfigTestInput{}).
 		MustImport(&Version, v3.SamlConfigTestOutput{}).
-		//GoogleOAuth Config
-		MustImportAndCustomize(&Version, v3.GoogleOauthConfig{}, func(schema *types.Schema) {
-			schema.BaseType = "authConfig"
-			schema.ResourceActions = map[string]types.Action{
-				"disable": {},
-				"configureTest": {
-					Input:  "googleOauthConfig",
-					Output: "googleOauthConfigTestOutput",
-				},
-				"testAndApply": {
-					Input: "googleOauthConfigApplyInput",
-				},
-			}
-			schema.CollectionMethods = []string{}
-			schema.ResourceMethods = []string{http.MethodGet, http.MethodPut}
-		}).
 		MustImport(&Version, v3.GoogleOauthConfigApplyInput{}).
 		MustImport(&Version, v3.GoogleOauthConfigTestOutput{}).
 		//OIDC Config
