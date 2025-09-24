@@ -20,6 +20,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	apiv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/providers/mocks"
+	publicclient "github.com/rancher/rancher/pkg/client/generated/management/v3public"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -935,6 +936,39 @@ type providerJSON struct {
 	JWKSURL       string   `json:"jwks_uri"`
 	UserInfoURL   string   `json:"userinfo_endpoint"`
 	Algorithms    []string `json:"id_token_signing_alg_values_supported"`
+}
+
+func TestTransformToAuthProvider(t *testing.T) {
+	oidcConfig := newOIDCConfig("8090")
+	o := OpenIDCProvider{
+		Name:      "keycloakoidc",
+		GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+	}
+	p, err := o.TransformToAuthProvider(map[string]any{
+		"clientId":           oidcConfig.ClientID,
+		"rancherUrl":         "https://keycloak.example.com",
+		"apiVersion":         "management.cattle.io/v3",
+		"kind":               "AuthConfig",
+		"logoutAllSupported": true,
+		"metadata": map[string]any{
+			"name": "genericoidc",
+		},
+		"status": map[string]any{
+			"conditions": nil,
+		},
+		"type":         "keycloakOIDCConfig",
+		"authEndpoint": oidcConfig.AuthEndpoint,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]any{
+		"id":                 "genericoidc",
+		"logoutAllEnabled":   false,
+		"logoutAllForced":    false,
+		"logoutAllSupported": true,
+		"type":               "keycloakOIDCProvider",
+		publicclient.OIDCProviderFieldRedirectURL: "http://localhost:8090/auth?client_id=test&response_type=code&redirect_uri=https://keycloak.example.com",
+	}, p)
 }
 
 // expiryIn is calculated inside the oauth2 library using time.Now, so we just compare the token is equal

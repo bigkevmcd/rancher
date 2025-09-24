@@ -13,6 +13,7 @@ const (
 	CognitoConfigFieldCreated             = "created"
 	CognitoConfigFieldCreatorID           = "creatorId"
 	CognitoConfigFieldEmailClaim          = "emailClaim"
+	CognitoConfigFieldEnablePKCE          = "enablePKCE"
 	CognitoConfigFieldEnabled             = "enabled"
 	CognitoConfigFieldEndSessionEndpoint  = "endSessionEndpoint"
 	CognitoConfigFieldGroupSearchEnabled  = "groupSearchEnabled"
@@ -49,6 +50,7 @@ type CognitoConfig struct {
 	Created             string            `json:"created,omitempty" yaml:"created,omitempty"`
 	CreatorID           string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
 	EmailClaim          string            `json:"emailClaim,omitempty" yaml:"emailClaim,omitempty"`
+	EnablePKCE          bool              `json:"enablePKCE,omitempty" yaml:"enablePKCE,omitempty"`
 	Enabled             bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	EndSessionEndpoint  string            `json:"endSessionEndpoint,omitempty" yaml:"endSessionEndpoint,omitempty"`
 	GroupSearchEnabled  *bool             `json:"groupSearchEnabled,omitempty" yaml:"groupSearchEnabled,omitempty"`
