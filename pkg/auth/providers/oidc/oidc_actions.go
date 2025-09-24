@@ -102,12 +102,12 @@ func (o *OpenIDCProvider) TestAndApply(request *types.APIContext) error {
 		if httperror.IsAPIError(err) {
 			return err
 		}
-		return errors.Wrap(err, "[generic oidc]: server error while authenticating")
+		return errors.Wrap(err, "[generic oidc]: failed to parse the issuer URL while uthenticating")
 	}
 	oidcConfig.Issuer = issuerURL.String()
 
 	// call provider
-	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(request.Request.Context(), oidcLogin, &oidcConfig)
+	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(request.Request.Context(), oidcLogin, &oidcConfig, request)
 	if err != nil {
 		if httperror.IsAPIError(err) {
 			return err

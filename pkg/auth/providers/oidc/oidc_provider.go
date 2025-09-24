@@ -47,14 +47,15 @@ type tokenManager interface {
 }
 
 type OpenIDCProvider struct {
-	Name        string
-	Type        string
-	CTX         context.Context
-	AuthConfigs v3.AuthConfigInterface
-	Secrets     wcorev1.SecretController
-	UserMGR     user.Manager
-	TokenMgr    tokenManager
-	GetConfig   func() (*apiv3.OIDCConfig, error)
+	Name         string
+	Type         string
+	CTX          context.Context
+	AuthConfigs  v3.AuthConfigInterface
+	Secrets      wcorev1.SecretController
+	UserMGR      user.Manager
+	TokenMgr     tokenManager
+	GetConfig    func() (*apiv3.OIDCConfig, error)
+	PKCEVerifier func() string
 }
 
 type ClaimInfo struct {
@@ -72,13 +73,14 @@ type ClaimInfo struct {
 
 func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, TokenMgr *tokens.Manager) common.AuthProvider {
 	p := &OpenIDCProvider{
-		Name:        Name,
-		Type:        client.OIDCConfigType,
-		CTX:         ctx,
-		AuthConfigs: mgmtCtx.Management.AuthConfigs(""),
-		Secrets:     mgmtCtx.Wrangler.Core.Secret(),
-		UserMGR:     userMGR,
-		TokenMgr:    TokenMgr,
+		Name:         Name,
+		Type:         client.OIDCConfigType,
+		CTX:          ctx,
+		AuthConfigs:  mgmtCtx.Management.AuthConfigs(""),
+		Secrets:      mgmtCtx.Wrangler.Core.Secret(),
+		UserMGR:      userMGR,
+		TokenMgr:     TokenMgr,
+		PKCEVerifier: oauth2.GenerateVerifier,
 	}
 
 	p.GetConfig = p.GetOIDCConfig
@@ -96,16 +98,18 @@ func (o *OpenIDCProvider) CustomizeSchema(schema *types.Schema) {
 
 func (o *OpenIDCProvider) AuthenticateUser(ctx context.Context, input any) (apiv3.Principal, []apiv3.Principal, string, error) {
 	login, ok := input.(*apiv3.OIDCLogin)
+	logrus.Debug("Authenticating user")
+	login, ok := input.(*v32.OIDCLogin)
 	if !ok {
 		return apiv3.Principal{}, nil, "", fmt.Errorf("unexpected input type")
 	}
-	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(ctx, login, nil)
+	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(ctx, login, nil, nil)
 	return userPrincipal, groupPrincipals, providerToken, err
 }
 
-func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *apiv3.OIDCLogin, config *apiv3.OIDCConfig) (apiv3.Principal, []apiv3.Principal, string, ClaimInfo, error) {
-	var userPrincipal apiv3.Principal
-	var groupPrincipals []apiv3.Principal
+func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *apiv3.OIDCLogin, config *apiv3.OIDCConfig, apiContext *types.APIContext) (apiv3.Principal, []apiv3.Principal, string, ClaimInfo, error) {
+	var userPrincipal v3.Principal
+	var groupPrincipals []v3.Principal
 	var userClaimInfo ClaimInfo
 	var err error
 
@@ -124,7 +128,7 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *apiv3.O
 	userPrincipal.Me = true
 	groupPrincipals = o.getGroupsFromClaimInfo(userClaimInfo)
 
-	logrus.Debugf("OpenIDCProvider: loginuser: checking user's access to rancher")
+	logrus.Debug("OpenIDCProvider: loginuser: checking user's access to rancher")
 	allowed, err := o.UserMGR.CheckAccess(config.AccessMode, config.AllowedPrincipalIDs, userPrincipal.Name, groupPrincipals)
 	if err != nil {
 		return userPrincipal, groupPrincipals, "", userClaimInfo, err
@@ -138,6 +142,15 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *apiv3.O
 	if err != nil {
 		return userPrincipal, groupPrincipals, "", userClaimInfo, err
 	}
+
+	tokenCookie := &http.Cookie{
+		Name:     "R_PKCE_VERIFIER",
+		Value:    o.PKCEVerifier(),
+		Secure:   apiContext.Request.URL.Scheme == "https",
+		Path:     "/",
+		HttpOnly: true,
+	}
+	http.SetCookie(apiContext.Response, tokenCookie)
 
 	return userPrincipal, groupPrincipals, string(oauthToken), userClaimInfo, err
 }
@@ -205,14 +218,39 @@ func (o *OpenIDCProvider) TransformToAuthProvider(authConfig map[string]any) (ma
 }
 
 func (o *OpenIDCProvider) getRedirectURL(config map[string]any) string {
+	// This must not be a URL encoded URL as it will be encoded by the front-end.
 	authURL, _ := FetchAuthURL(config)
 
-	return fmt.Sprintf(
-		"%s?client_id=%s&response_type=code&redirect_uri=%s",
-		authURL,
-		config["clientId"],
-		config["rancherUrl"],
-	)
+	values := []string{
+		"client_id", config["clientId"].(string),
+		"response_type", "code",
+	}
+
+	logrus.Debug("Checking for PKCE")
+	if enablePKCE, ok := config["enablePKCE"]; ok {
+		pkce, ok := enablePKCE.(bool)
+		verifier := o.PKCEVerifier()
+		if ok && pkce {
+			logrus.Debug("PKCE Enabled sending code_challenge and code_challenge_method")
+			values = append(values, "code_challenge", oauth2.S256ChallengeFromVerifier(verifier))
+			values = append(values, "code_challenge_method", "S256")
+		} else {
+			logrus.Debug("PKCE not Enabled for redirect URL")
+		}
+	} else {
+		logrus.Debug("PKCE - no configuration")
+	}
+
+	values = append(values, "redirect_uri", config["rancherUrl"].(string))
+
+	// Ideally this would use url.Values{} but that encodes the query
+	// parameters.
+	//
+	// The front-end doesn't expect a URL encoded string and so this uses a
+	// custom function to generate the string.
+	redirectURL := fmt.Sprintf("%s?%s", authURL, stringifyValues(values))
+
+	return redirectURL
 }
 
 func (o *OpenIDCProvider) RefetchGroupPrincipals(principalID string, secret string) ([]apiv3.Principal, error) {
@@ -349,6 +387,11 @@ func (o *OpenIDCProvider) GetOIDCConfig() (*apiv3.OIDCConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode OidcConfig: %w", err)
 	}
+	if storedOidcConfig.EnablePKCE {
+		logrus.Debugf("GetOIDCConfig PKCE Enabled for %s", o.Name)
+	} else {
+		logrus.Debugf("GetOIDCConfig PKCE IS NOT Enabled %s", o.Name)
+	}
 
 	if storedOidcConfig.PrivateKey != "" {
 		value, err := common.ReadFromSecret(o.Secrets, storedOidcConfig.PrivateKey, strings.ToLower(client.OIDCConfigFieldPrivateKey))
@@ -379,6 +422,7 @@ func (o *OpenIDCProvider) GetUserExtraAttributes(userPrincipal apiv3.Principal) 
 }
 
 func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *apiv3.OIDCConfig, authCode string, claimInfo *ClaimInfo, userName string) (*oidc.UserInfo, *oauth2.Token, error) {
+	logrus.Info("OpenIDCProvider: getUserInfoFromAuthCode")
 	var userInfo *oidc.UserInfo
 	var oauth2Token *oauth2.Token
 	var err error
@@ -395,10 +439,26 @@ func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *
 	oauthConfig := ConfigToOauthConfig(provider.Endpoint(), config)
 	var verifier = provider.Verifier(&oidc.Config{ClientID: config.ClientID})
 
-	oauth2Token, err = oauthConfig.Exchange(updatedContext, authCode, oauth2.SetAuthURLParam("scope", strings.Join(oauthConfig.Scopes, " ")))
-	if err != nil {
-		return userInfo, oauth2Token, err
+	opts := []oauth2.AuthCodeOption{
+		oauth2.SetAuthURLParam("scope", strings.Join(oauthConfig.Scopes, " ")),
 	}
+
+	// TODO: Remove this.
+	config.EnablePKCE = true
+	if config.EnablePKCE {
+		// TODO: Get the PKCE value from the request
+		logrus.Debug("PKCE Enabled - sending verifier in token exchange")
+		// opts = append(opts, oauth2.VerifierOption(verifier))
+	} else {
+		logrus.Debug("PKCE not Enabled - not sending verifier")
+	}
+
+	oauth2Token, err = oauthConfig.Exchange(updatedContext, authCode, opts...)
+	if err != nil {
+		return userInfo, oauth2Token, fmt.Errorf("failed exchanging token: %w", err)
+	}
+
+	// TODO: Delete the R_PKCE_VERIFIER cookie!
 
 	// Get the ID token.  The ID token should be there because we require the openid scope.
 	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
@@ -800,4 +860,32 @@ func getValueFromClaims[T any](idToken *oidc.IDToken, name string) (T, error) {
 	}
 
 	return claim, nil
+}
+
+// this will take a slice of pairs of strings and generate a non-encoded string
+// in the order they are added separated by &
+// e.g. []string{"testing","value","user","1"} == "testing=value&user=1"
+//
+// If an uneven number of elements is passed, the final one will be dropped.
+func stringifyValues(vals []string) string {
+	if len(vals) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+
+	for i := 0; i < len(vals); i += 2 {
+		if len(vals)-i < 2 {
+			break
+		}
+		k, v := vals[i], vals[i+1]
+		if buf.Len() > 0 {
+			buf.WriteByte('&')
+		}
+		buf.WriteString(k)
+		buf.WriteByte('=')
+		buf.WriteString(v)
+	}
+
+	return buf.String()
 }

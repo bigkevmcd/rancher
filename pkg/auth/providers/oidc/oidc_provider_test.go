@@ -370,6 +370,9 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			o := OpenIDCProvider{
 				Name:     providerName,
 				TokenMgr: test.tokenManagerMock(oidcResp.token),
+				PKCEVerifier: func() string {
+					return "test-pkce-verifier"
+				},
 			}
 			ctx := context.TODO()
 			claimInfo := &ClaimInfo{}
@@ -939,7 +942,9 @@ type providerJSON struct {
 }
 
 func TestTransformToAuthProvider(t *testing.T) {
-	oidcConfig := newOIDCConfig("8090")
+	oidcConfig := newOIDCConfig("8090", func(s *v3.OIDCConfig) {
+		s.EnablePKCE = true
+	})
 	o := OpenIDCProvider{
 		Name:      "keycloakoidc",
 		GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
