@@ -13,6 +13,7 @@ const (
 	GenericOIDCConfigFieldCreated             = "created"
 	GenericOIDCConfigFieldCreatorID           = "creatorId"
 	GenericOIDCConfigFieldEmailClaim          = "emailClaim"
+	GenericOIDCConfigFieldEnablePKCE          = "enablePKCE"
 	GenericOIDCConfigFieldEnabled             = "enabled"
 	GenericOIDCConfigFieldEndSessionEndpoint  = "endSessionEndpoint"
 	GenericOIDCConfigFieldGroupSearchEnabled  = "groupSearchEnabled"
@@ -49,6 +50,7 @@ type GenericOIDCConfig struct {
 	Created             string            `json:"created,omitempty" yaml:"created,omitempty"`
 	CreatorID           string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
 	EmailClaim          string            `json:"emailClaim,omitempty" yaml:"emailClaim,omitempty"`
+	EnablePKCE          bool              `json:"enablePKCE,omitempty" yaml:"enablePKCE,omitempty"`
 	Enabled             bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	EndSessionEndpoint  string            `json:"endSessionEndpoint,omitempty" yaml:"endSessionEndpoint,omitempty"`
 	GroupSearchEnabled  *bool             `json:"groupSearchEnabled,omitempty" yaml:"groupSearchEnabled,omitempty"`

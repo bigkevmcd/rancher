@@ -1,0 +1,46 @@
+--- pkg/auth/providers/oidc/oidc_provider.go
++++ pkg/auth/providers/oidc/oidc_provider.go
+@@ -217,19 +232,34 @@ func (o *OpenIDCProvider) GetPrincipal(principalID string, token accessor.TokenA
+ 
+ func (o *OpenIDCProvider) TransformToAuthProvider(authConfig map[string]any) (map[string]any, error) {
+ 	p := common.TransformToAuthProvider(authConfig)
+-	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig)
++	redirectPath, err := o.getRedirectURL(authConfig)
++	if err != nil {
++		return nil, fmt.Errorf("creating OIDC login URL: %w", err)
++	}
++	logrus.Debugf("TransformToAuthProvider using URL %s", redirectPath)
++
++	p[publicclient.OIDCProviderFieldRedirectURL] = redirectPath
++
+ 	return p, nil
+ }
+ 
+-func (o *OpenIDCProvider) getRedirectURL(config map[string]any) string {
+-	authURL, _ := FetchAuthURL(config)
++func (o *OpenIDCProvider) getRedirectURL(authConfig map[string]any) (string, error) {
++	name := authConfig["metadata"].(map[string]any)["name"].(string)
++	rancherAPIHost, ok := authConfig[client.GenericOIDCConfigFieldRancherAPIHost].(string)
++	// No API Host - no PKCE Redirection.
++	if !ok {
++		log.Debugf("OpenIDCProvider: No API Host - no PKCE Redirection")
++		authURL, _ := FetchAuthURL(authConfig)
++		return fmt.Sprintf(
++			"%s?client_id=%s&response_type=code&redirect_uri=%s",
++			authURL,
++			authConfig["clientId"],
++			authConfig["rancherUrl"],
++		), nil
+ 
+-	return fmt.Sprintf(
+-		"%s?client_id=%s&response_type=code&redirect_uri=%s",
+-		authURL,
+-		config["clientId"],
+-		config["rancherUrl"],
+-	)
++	}
++
++	return url.JoinPath(rancherAPIHost, "v1-oauth", name)
+ }
+ 
+ func (o *OpenIDCProvider) RefetchGroupPrincipals(principalID string, secret string) ([]apiv3.Principal, error) {

@@ -1,0 +1,11 @@
+--- pkg/auth/providers/oidc/oidc_actions.go
++++ pkg/auth/providers/oidc/oidc_actions.go
+@@ -55,7 +55,7 @@ func (o *OpenIDCProvider) ConfigureTest(request *types.APIContext) error {
+ 	}
+ 
+ 	data := map[string]any{
+-		"redirectUrl": o.getRedirectURL(input),
++		"redirectUrl": GetRedirectURL(input),
+ 		"type":        "OIDCTestOutput",
+ 	}
+ 	request.WriteResponse(http.StatusOK, data)

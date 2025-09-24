@@ -13,6 +13,7 @@ const (
 	KeyCloakOIDCConfigFieldCreated             = "created"
 	KeyCloakOIDCConfigFieldCreatorID           = "creatorId"
 	KeyCloakOIDCConfigFieldEmailClaim          = "emailClaim"
+	KeyCloakOIDCConfigFieldEnablePKCE          = "enablePKCE"
 	KeyCloakOIDCConfigFieldEnabled             = "enabled"
 	KeyCloakOIDCConfigFieldEndSessionEndpoint  = "endSessionEndpoint"
 	KeyCloakOIDCConfigFieldGroupSearchEnabled  = "groupSearchEnabled"
@@ -49,6 +50,7 @@ type KeyCloakOIDCConfig struct {
 	Created             string            `json:"created,omitempty" yaml:"created,omitempty"`
 	CreatorID           string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
 	EmailClaim          string            `json:"emailClaim,omitempty" yaml:"emailClaim,omitempty"`
+	EnablePKCE          bool              `json:"enablePKCE,omitempty" yaml:"enablePKCE,omitempty"`
 	Enabled             bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	EndSessionEndpoint  string            `json:"endSessionEndpoint,omitempty" yaml:"endSessionEndpoint,omitempty"`
 	GroupSearchEnabled  *bool             `json:"groupSearchEnabled,omitempty" yaml:"groupSearchEnabled,omitempty"`

@@ -721,6 +721,9 @@ type OIDCConfig struct {
 
 	// EmailClaim is used instead of email
 	EmailClaim string `json:"emailClaim,omitempty"`
+
+	// Enable PKCE challenge
+	EnablePKCE bool `json:"enablePKCE"`
 }
 
 type OIDCTestOutput struct {

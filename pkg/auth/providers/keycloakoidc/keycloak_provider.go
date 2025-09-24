@@ -42,8 +42,11 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 			Secrets:     mgmtCtx.Wrangler.Core.Secret(),
 			UserMGR:     userMGR,
 			TokenMgr:    tokenMGR,
+			// TODO: Should this use the rancher one?
+			PKCEVerifier: oauth2.GenerateVerifier,
 		},
 	}
+
 	p.GetConfig = p.GetOIDCConfig
 	return p
 }
