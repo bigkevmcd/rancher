@@ -73,14 +73,17 @@ type ClaimInfo struct {
 
 func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, TokenMgr *tokens.Manager) common.AuthProvider {
 	p := &OpenIDCProvider{
-		Name:         Name,
-		Type:         client.OIDCConfigType,
-		CTX:          ctx,
-		AuthConfigs:  mgmtCtx.Management.AuthConfigs(""),
-		Secrets:      mgmtCtx.Wrangler.Core.Secret(),
-		UserMGR:      userMGR,
-		TokenMgr:     TokenMgr,
-		PKCEVerifier: oauth2.GenerateVerifier,
+		Name:        Name,
+		Type:        client.OIDCConfigType,
+		CTX:         ctx,
+		AuthConfigs: mgmtCtx.Management.AuthConfigs(""),
+		Secrets:     mgmtCtx.Wrangler.Core.Secret(),
+		UserMGR:     userMGR,
+		TokenMgr:    TokenMgr,
+		PKCEVerifier: func() string {
+			// Hard-coded for now.
+			return "ChbMTkDBIhGJo9xkhjsfQmM8sXQPrqmnmlTD1ggi0tg"
+		},
 	}
 
 	p.GetConfig = p.GetOIDCConfig
@@ -446,9 +449,11 @@ func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *
 	// TODO: Remove this.
 	config.EnablePKCE = true
 	if config.EnablePKCE {
-		// TODO: Get the PKCE value from the request
+		// TODO: Get the PKCE value from the request and not by querying the
+		// hard-coded value - this is to ensure that we're using the token
+		// correctly in the front-end.
 		logrus.Debug("PKCE Enabled - sending verifier in token exchange")
-		// opts = append(opts, oauth2.VerifierOption(verifier))
+		opts = append(opts, oauth2.VerifierOption(o.PKCEVerifier()))
 	} else {
 		logrus.Debug("PKCE not Enabled - not sending verifier")
 	}

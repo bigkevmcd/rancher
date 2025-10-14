@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/rancher/rancher/pkg/auth/providers/common"
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
 	managementschema "github.com/rancher/rancher/pkg/schemas/management.cattle.io/v3"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -54,11 +56,16 @@ func (o *OpenIDCProvider) ConfigureTest(request *types.APIContext) error {
 		return err
 	}
 
+	enablePKCE := os.Getenv("TEST_ENABLE_PKCE") == "true"
+	logrus.Debugf("OpenIDCProvider: PKCE enabled for testing: %v", enablePKCE)
+	input["enablePKCE"] = enablePKCE
+
 	data := map[string]any{
 		"redirectUrl": o.getRedirectURL(input),
 		"type":        "OIDCTestOutput",
 	}
 	request.WriteResponse(http.StatusOK, data)
+
 	return nil
 }
 
