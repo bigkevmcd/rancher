@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rancher/norman/api/handler"
@@ -19,9 +20,12 @@ import (
 	managementschema "github.com/rancher/rancher/pkg/schemas/management.cattle.io/v3"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 )
 
-const cognitoGroupsClaim = "cognito:groups"
+const (
+	cognitoGroupsClaim = "cognito:groups"
+)
 
 func (o *OpenIDCProvider) Formatter(apiContext *types.APIContext, resource *types.RawResource) {
 	common.AddCommonActions(apiContext, resource)
@@ -60,10 +64,15 @@ func (o *OpenIDCProvider) ConfigureTest(request *types.APIContext) error {
 	logrus.Debugf("OpenIDCProvider: PKCE enabled for testing: %v", enablePKCE)
 	input["enablePKCE"] = enablePKCE
 
+	pkceVerifier := o.PKCEVerifier()
+	verifierCookie := newPKCEVerifierCookie(time.Now().Add(time.Minute*20), pkceVerifier, request.Request.URL.Scheme == "https")
+	http.SetCookie(request.Response, verifierCookie)
+
 	data := map[string]any{
-		"redirectUrl": o.getRedirectURL(input),
+		"redirectUrl": o.getRedirectURL(input, pkceVerifier),
 		"type":        "OIDCTestOutput",
 	}
+
 	request.WriteResponse(http.StatusOK, data)
 
 	return nil
@@ -86,8 +95,7 @@ func (o *OpenIDCProvider) TestAndApply(request *types.APIContext) error {
 	// set a default value for GroupSearchEnabled
 	// in case user input is nil for some reasons.
 	if oidcConfigApplyInput.OIDCConfig.GroupSearchEnabled == nil {
-		falseBool := false
-		oidcConfig.GroupSearchEnabled = &falseBool
+		oidcConfig.GroupSearchEnabled = ptr.To(false)
 	}
 	// we need to set cognito:groups as GroupsClaim in order to be able to fetch groups from aws cognito
 	if oidcConfig.Type == client.CognitoConfigType {
@@ -115,6 +123,13 @@ func (o *OpenIDCProvider) TestAndApply(request *types.APIContext) error {
 
 	// call provider
 	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(request.Request.Context(), oidcLogin, &oidcConfig, request)
+	defer func() {
+		// We can delete the token as even if it has failed, it will require a new
+		// token.
+		verifierCookie := newPKCEVerifierCookie(time.Now().Add(time.Second*-10), "", request.Request.URL.Scheme == "https")
+		http.SetCookie(request.Response, verifierCookie)
+	}()
+
 	if err != nil {
 		if httperror.IsAPIError(err) {
 			return err
@@ -149,4 +164,14 @@ func validateScopes(input string) bool {
 	}
 	values := strings.Fields(input)
 	return slices.Contains(values, "openid")
+}
+
+func newPKCEVerifierCookie(expires time.Time, value string, secure bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     pkceVerifierCookieName,
+		Value:    value,
+		Secure:   secure,
+		Path:     "/",
+		HttpOnly: true,
+	}
 }

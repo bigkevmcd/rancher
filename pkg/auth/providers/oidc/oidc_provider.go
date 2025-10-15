@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -35,9 +36,10 @@ import (
 )
 
 const (
-	Name      = "oidc"
-	UserType  = "user"
-	GroupType = "group"
+	Name                   = "oidc"
+	UserType               = "user"
+	GroupType              = "group"
+	pkceVerifierCookieName = "R_PKCE_VERIFIER"
 )
 
 type tokenManager interface {
@@ -123,7 +125,7 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *apiv3.O
 		}
 	}
 
-	userInfo, oauth2Token, err := o.getUserInfoFromAuthCode(&ctx, config, oauthLoginInfo.Code, &userClaimInfo, "")
+	userInfo, oauth2Token, err := o.getUserInfoFromAuthCode(&ctx, config, oauthLoginInfo.Code, &userClaimInfo, "", apiContext)
 	if err != nil {
 		return userPrincipal, groupPrincipals, "", userClaimInfo, err
 	}
@@ -145,15 +147,6 @@ func (o *OpenIDCProvider) LoginUser(ctx context.Context, oauthLoginInfo *apiv3.O
 	if err != nil {
 		return userPrincipal, groupPrincipals, "", userClaimInfo, err
 	}
-
-	tokenCookie := &http.Cookie{
-		Name:     "R_PKCE_VERIFIER",
-		Value:    o.PKCEVerifier(),
-		Secure:   apiContext.Request.URL.Scheme == "https",
-		Path:     "/",
-		HttpOnly: true,
-	}
-	http.SetCookie(apiContext.Response, tokenCookie)
 
 	return userPrincipal, groupPrincipals, string(oauthToken), userClaimInfo, err
 }
@@ -216,11 +209,11 @@ func (o *OpenIDCProvider) GetPrincipal(principalID string, token accessor.TokenA
 
 func (o *OpenIDCProvider) TransformToAuthProvider(authConfig map[string]any) (map[string]any, error) {
 	p := common.TransformToAuthProvider(authConfig)
-	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig)
+	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig, "")
 	return p, nil
 }
 
-func (o *OpenIDCProvider) getRedirectURL(config map[string]any) string {
+func (o *OpenIDCProvider) getRedirectURL(config map[string]any, pkceVerifier string) string {
 	// This must not be a URL encoded URL as it will be encoded by the front-end.
 	authURL, _ := FetchAuthURL(config)
 
@@ -232,10 +225,9 @@ func (o *OpenIDCProvider) getRedirectURL(config map[string]any) string {
 	logrus.Debug("Checking for PKCE")
 	if enablePKCE, ok := config["enablePKCE"]; ok {
 		pkce, ok := enablePKCE.(bool)
-		verifier := o.PKCEVerifier()
-		if ok && pkce {
+		if ok && pkce && pkceVerifier != "" {
 			logrus.Debug("PKCE Enabled sending code_challenge and code_challenge_method")
-			values = append(values, "code_challenge", oauth2.S256ChallengeFromVerifier(verifier))
+			values = append(values, "code_challenge", oauth2.S256ChallengeFromVerifier(pkceVerifier))
 			values = append(values, "code_challenge_method", "S256")
 		} else {
 			logrus.Debug("PKCE not Enabled for redirect URL")
@@ -424,7 +416,7 @@ func (o *OpenIDCProvider) GetUserExtraAttributes(userPrincipal apiv3.Principal) 
 	return common.GetCommonUserExtraAttributes(userPrincipal)
 }
 
-func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *apiv3.OIDCConfig, authCode string, claimInfo *ClaimInfo, userName string) (*oidc.UserInfo, *oauth2.Token, error) {
+func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *apiv3.OIDCConfig, authCode string, claimInfo *ClaimInfo, userName string, apiContext *types.APIContext) (*oidc.UserInfo, *oauth2.Token, error) {
 	logrus.Info("OpenIDCProvider: getUserInfoFromAuthCode")
 	var userInfo *oidc.UserInfo
 	var oauth2Token *oauth2.Token
@@ -447,13 +439,16 @@ func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *
 	}
 
 	// TODO: Remove this.
-	config.EnablePKCE = true
-	if config.EnablePKCE {
-		// TODO: Get the PKCE value from the request and not by querying the
-		// hard-coded value - this is to ensure that we're using the token
-		// correctly in the front-end.
-		logrus.Debug("PKCE Enabled - sending verifier in token exchange")
-		opts = append(opts, oauth2.VerifierOption(o.PKCEVerifier()))
+	config.EnablePKCE = os.Getenv("TEST_ENABLE_PKCE") == "true"
+
+	if config.EnablePKCE && apiContext != nil {
+		cookie, err := apiContext.Request.Cookie(pkceVerifierCookieName)
+		if err == nil && cookie != nil {
+			logrus.Debugf("PKCE Enabled - sending verifier in token exchange: %s", cookie.Value)
+			opts = append(opts, oauth2.VerifierOption(cookie.Value))
+		} else {
+			logrus.Debug("PKCE Enabled - but no cookie was available for verifier")
+		}
 	} else {
 		logrus.Debug("PKCE not Enabled - not sending verifier")
 	}
@@ -462,8 +457,6 @@ func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *
 	if err != nil {
 		return userInfo, oauth2Token, fmt.Errorf("failed exchanging token: %w", err)
 	}
-
-	// TODO: Delete the R_PKCE_VERIFIER cookie!
 
 	// Get the ID token.  The ID token should be there because we require the openid scope.
 	rawIDToken, ok := oauth2Token.Extra("id_token").(string)

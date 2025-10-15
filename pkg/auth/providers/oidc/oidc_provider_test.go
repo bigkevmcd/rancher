@@ -377,7 +377,7 @@ func TestGetUserInfoFromAuthCode(t *testing.T) {
 			ctx := context.TODO()
 			claimInfo := &ClaimInfo{}
 
-			userInfo, token, err := o.getUserInfoFromAuthCode(&ctx, test.config(port), test.authCode, claimInfo, userId)
+			userInfo, token, err := o.getUserInfoFromAuthCode(&ctx, test.config(port), test.authCode, claimInfo, userId, nil)
 
 			if test.expectedErrorMessage != "" {
 				assert.ErrorContains(t, err, test.expectedErrorMessage)
