@@ -123,13 +123,6 @@ func (o *OpenIDCProvider) TestAndApply(request *types.APIContext) error {
 
 	// call provider
 	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(request.Request.Context(), oidcLogin, &oidcConfig, request)
-	defer func() {
-		// We can delete the token as even if it has failed, it will require a new
-		// token.
-		verifierCookie := newPKCEVerifierCookie(time.Now().Add(time.Second*-10), "", request.Request.URL.Scheme == "https")
-		http.SetCookie(request.Response, verifierCookie)
-	}()
-
 	if err != nil {
 		if httperror.IsAPIError(err) {
 			return err

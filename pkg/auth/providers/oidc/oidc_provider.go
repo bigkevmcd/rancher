@@ -209,7 +209,7 @@ func (o *OpenIDCProvider) GetPrincipal(principalID string, token accessor.TokenA
 
 func (o *OpenIDCProvider) TransformToAuthProvider(authConfig map[string]any) (map[string]any, error) {
 	p := common.TransformToAuthProvider(authConfig)
-	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig, "")
+	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig, oauth2.GenerateVerifier())
 	return p, nil
 }
 
@@ -440,12 +440,15 @@ func (o *OpenIDCProvider) getUserInfoFromAuthCode(ctx *context.Context, config *
 
 	// TODO: Remove this.
 	config.EnablePKCE = os.Getenv("TEST_ENABLE_PKCE") == "true"
-
 	if config.EnablePKCE && apiContext != nil {
 		cookie, err := apiContext.Request.Cookie(pkceVerifierCookieName)
 		if err == nil && cookie != nil {
 			logrus.Debugf("PKCE Enabled - sending verifier in token exchange: %s", cookie.Value)
 			opts = append(opts, oauth2.VerifierOption(cookie.Value))
+			// We can delete the token as even if it fails, it will require a new
+			// token.
+			verifierCookie := newPKCEVerifierCookie(time.Now().Add(time.Second*-10), "", apiContext.Request.URL.Scheme == "https")
+			http.SetCookie(apiContext.Response, verifierCookie)
 		} else {
 			logrus.Debug("PKCE Enabled - but no cookie was available for verifier")
 		}
