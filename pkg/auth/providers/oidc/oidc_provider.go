@@ -75,17 +75,14 @@ type ClaimInfo struct {
 
 func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, TokenMgr *tokens.Manager) common.AuthProvider {
 	p := &OpenIDCProvider{
-		Name:        Name,
-		Type:        client.OIDCConfigType,
-		CTX:         ctx,
-		AuthConfigs: mgmtCtx.Management.AuthConfigs(""),
-		Secrets:     mgmtCtx.Wrangler.Core.Secret(),
-		UserMGR:     userMGR,
-		TokenMgr:    TokenMgr,
-		PKCEVerifier: func() string {
-			// Hard-coded for now.
-			return "ChbMTkDBIhGJo9xkhjsfQmM8sXQPrqmnmlTD1ggi0tg"
-		},
+		Name:         Name,
+		Type:         client.OIDCConfigType,
+		CTX:          ctx,
+		AuthConfigs:  mgmtCtx.Management.AuthConfigs(""),
+		Secrets:      mgmtCtx.Wrangler.Core.Secret(),
+		UserMGR:      userMGR,
+		TokenMgr:     TokenMgr,
+		PKCEVerifier: oauth2.GenerateVerifier(),
 	}
 
 	p.GetConfig = p.GetOIDCConfig
@@ -209,7 +206,8 @@ func (o *OpenIDCProvider) GetPrincipal(principalID string, token accessor.TokenA
 
 func (o *OpenIDCProvider) TransformToAuthProvider(authConfig map[string]any) (map[string]any, error) {
 	p := common.TransformToAuthProvider(authConfig)
-	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig, oauth2.GenerateVerifier())
+	// TODO: How to pass the verifier through?
+	p[publicclient.OIDCProviderFieldRedirectURL] = o.getRedirectURL(authConfig, o.PKCEVerifier())
 	return p, nil
 }
 
@@ -230,7 +228,7 @@ func (o *OpenIDCProvider) getRedirectURL(config map[string]any, pkceVerifier str
 			values = append(values, "code_challenge", oauth2.S256ChallengeFromVerifier(pkceVerifier))
 			values = append(values, "code_challenge_method", "S256")
 		} else {
-			logrus.Debug("PKCE not Enabled for redirect URL")
+			logrus.Debug("PKCE NOT Enabled for redirect URL")
 		}
 	} else {
 		logrus.Debug("PKCE - no configuration")
