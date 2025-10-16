@@ -942,12 +942,15 @@ type providerJSON struct {
 }
 
 func TestTransformToAuthProvider(t *testing.T) {
-	oidcConfig := newOIDCConfig("8090", func(s *v3.OIDCConfig) {
+	oidcConfig := newOIDCConfig("8090", func(s *apiv3.OIDCConfig) {
 		s.EnablePKCE = true
 	})
 	o := OpenIDCProvider{
 		Name:      "keycloakoidc",
-		GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func() (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
+		PKCEVerifier: func() string {
+			return "not-a-real-pkce"
+		},
 	}
 	p, err := o.TransformToAuthProvider(map[string]any{
 		"clientId":           oidcConfig.ClientID,

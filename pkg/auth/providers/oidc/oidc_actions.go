@@ -23,9 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-const (
-	cognitoGroupsClaim = "cognito:groups"
-)
+const cognitoGroupsClaim = "cognito:groups"
 
 func (o *OpenIDCProvider) Formatter(apiContext *types.APIContext, resource *types.RawResource) {
 	common.AddCommonActions(apiContext, resource)
@@ -117,11 +115,10 @@ func (o *OpenIDCProvider) TestAndApply(request *types.APIContext) error {
 		if httperror.IsAPIError(err) {
 			return err
 		}
-		return errors.Wrap(err, "[generic oidc]: failed to parse the issuer URL while uthenticating")
+		return errors.Wrap(err, "[generic oidc]: failed to parse the issuer URL while authenticating")
 	}
 	oidcConfig.Issuer = issuerURL.String()
 
-	// call provider
 	userPrincipal, groupPrincipals, providerToken, _, err := o.LoginUser(request.Request.Context(), oidcLogin, &oidcConfig, request)
 	if err != nil {
 		if httperror.IsAPIError(err) {

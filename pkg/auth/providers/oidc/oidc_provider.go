@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/golang-jwt/jwt/v5"
@@ -82,7 +83,7 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 		Secrets:      mgmtCtx.Wrangler.Core.Secret(),
 		UserMGR:      userMGR,
 		TokenMgr:     TokenMgr,
-		PKCEVerifier: oauth2.GenerateVerifier(),
+		PKCEVerifier: oauth2.GenerateVerifier,
 	}
 
 	p.GetConfig = p.GetOIDCConfig
@@ -99,9 +100,8 @@ func (o *OpenIDCProvider) CustomizeSchema(schema *types.Schema) {
 }
 
 func (o *OpenIDCProvider) AuthenticateUser(ctx context.Context, input any) (apiv3.Principal, []apiv3.Principal, string, error) {
-	login, ok := input.(*apiv3.OIDCLogin)
 	logrus.Debug("Authenticating user")
-	login, ok := input.(*v32.OIDCLogin)
+	login, ok := input.(*apiv3.OIDCLogin)
 	if !ok {
 		return apiv3.Principal{}, nil, "", fmt.Errorf("unexpected input type")
 	}
