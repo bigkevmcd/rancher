@@ -301,6 +301,10 @@ type AuthConfig struct {
 	// Currently only the SAML providers do, with their `Single Log Out` flow.
 	LogoutAllSupported bool `json:"logoutAllSupported,omitempty"`
 
+	// spec provides the configuration for an auth provider.
+	// +optional
+	Spec AuthConfigSpec `json:"spec"`
+
 	Status AuthConfigStatus `json:"status"`
 }
 
@@ -328,6 +332,68 @@ type AuthConfigConditions struct {
 	Message string `json:"message,omitempty"`
 }
 
+type AuthConfigSpec struct {
+	// github provides configuration for authenticating with GitHub OAuth.
+	// +optional
+	Github *GithubConfig `json:"github,omitempty" yaml:"github,omitempty"`
+}
+
+const (
+	// GithubConfigFieldClientSecret is used as the name of key storing the Github client secret in a Secret.
+	GithubConfigFieldClientSecret string = "clientsecret"
+)
+
+// GithubConfig provides configuration for authenticating via GitHub OAuth app.
+type GithubConfig struct {
+	// hostname is the host to communicate with for initiating the OAuth flow it
+	// defaults to github.com.
+	//
+	// +kubebuilder:default="github.com"
+	// +required
+	Hostname string `json:"hostname,omitempty"`
+
+	// tls indicates whether or not Rancher should use TLS to communicate with
+	// the provided hostname.
+	//
+	// +kubebuilder:default=true
+	// +required
+	TLS bool `json:"tls,omitempty"`
+
+	// clientId provides the GitHub OAuth App client ID.
+	//
+	// +kubebuilder:validation:Required
+	ClientID string `json:"clientId,omitempty"`
+
+	// clientSecretRef provides the name of a Secret that contains the OAuth App
+	// client secret.
+	//
+	// The client secret must be in the clientsecret key in the Secret.
+	//
+	// +required
+	ClientSecretRef *SecretReference `json:"clientSecretRef,omitempty"`
+
+	// additionalClientIds is a map of clientID to client secrets
+	//
+	// +optional
+	AdditionalClientIDs map[string]string `json:"additionalClientIds,omitempty"`
+
+	// hostnameToClientId is a map of hostname to OAuth App client ID.
+	//
+	// +optional
+	HostnameToClientID map[string]string `json:"hostnameToClientId,omitempty"`
+}
+
+// SecretReference points to a Secret with both a Namespace and Name.
+type SecretReference struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+// ToRancherRef converts to a Rancher-style reference.
+func (s SecretReference) ToRancherRef() string {
+	return s.Namespace + ":" + s.Name
+}
+
 // +genclient
 // +kubebuilder:skipversion
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -347,14 +413,13 @@ type LocalConfig struct {
 	AuthConfig `json:",inline" mapstructure:",squash"`
 }
 
-// +genclient
-// +kubebuilder:skipversion
-// +genclient:nonNamespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type GithubConfigTestOutput struct {
+	RedirectURL string `json:"redirectUrl"`
+}
 
-type GithubConfig struct {
-	AuthConfig `json:",inline" mapstructure:",squash"`
-
+// GithubApplyInput is a temporary holding structure to provide the
+// ClientID/ClientSecret when configuring the Github provider.
+type GithubApplyInput struct {
 	Hostname string `json:"hostname,omitempty" norman:"default=github.com,required"`
 	TLS      bool   `json:"tls,omitempty" norman:"notnullable,default=true,required"`
 
@@ -366,14 +431,10 @@ type GithubConfig struct {
 	HostnameToClientID  map[string]string `json:"hostnameToClientId,omitempty" norman:"nocreate,noupdate"`
 }
 
-type GithubConfigTestOutput struct {
-	RedirectURL string `json:"redirectUrl"`
-}
-
 type GithubConfigApplyInput struct {
-	GithubConfig GithubConfig `json:"githubConfig,omitempty"`
-	Code         string       `json:"code,omitempty"`
-	Enabled      bool         `json:"enabled,omitempty"`
+	GithubConfig GithubApplyInput `json:"githubConfig,omitempty"`
+	Code         string           `json:"code,omitempty"`
+	Enabled      bool             `json:"enabled,omitempty"`
 }
 
 // +genclient

@@ -420,6 +420,7 @@ func authnTypes(schemas *types.Schemas) *types.Schemas {
 		}).
 		MustImport(&Version, v3.GithubConfigTestOutput{}).
 		MustImport(&Version, v3.GithubConfigApplyInput{}).
+		MustImport(&Version, v3.GithubApplyInput{}).
 		//GithubApp Config
 		MustImportAndCustomize(&Version, v3.GithubAppConfig{}, func(schema *types.Schema) {
 			schema.BaseType = "authConfig"

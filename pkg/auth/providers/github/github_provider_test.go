@@ -135,9 +135,15 @@ func TestSearchPrincipals(t *testing.T) {
 
 	provider := Provider{
 		githubClient: &GClient{httpClient: srv.Client()},
-		getConfig:    func() (*apiv3.GithubConfig, error) { return config, nil },
-		userMGR:      userManager,
-		tokenMGR:     &fakeTokensManager{},
+		getConfig: func() (*apiv3.AuthConfig, error) {
+			return &apiv3.AuthConfig{
+				Spec: apiv3.AuthConfigSpec{
+					Github: config,
+				},
+			}, nil
+		},
+		userMGR:  userManager,
+		tokenMGR: &fakeTokensManager{},
 	}
 
 	token := apiv3.Token{
@@ -322,9 +328,15 @@ func TestSearchPrincipalsExt(t *testing.T) {
 
 	provider := Provider{
 		githubClient: &GClient{httpClient: srv.Client()},
-		getConfig:    func() (*apiv3.GithubConfig, error) { return config, nil },
-		userMGR:      userManager,
-		tokenMGR:     &fakeTokensManager{},
+		getConfig: func() (*apiv3.AuthConfig, error) {
+			return &apiv3.AuthConfig{
+				Spec: apiv3.AuthConfigSpec{
+					Github: config,
+				},
+			}, nil
+		},
+		userMGR:  userManager,
+		tokenMGR: &fakeTokensManager{},
 	}
 
 	token := ext.Token{

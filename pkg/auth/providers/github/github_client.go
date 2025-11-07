@@ -29,10 +29,10 @@ type GClient struct {
 	httpClient *http.Client
 }
 
-func (g *GClient) getAccessToken(code string, config *apiv3.GithubConfig) (string, error) {
+func (g *GClient) getAccessToken(code string, config *apiv3.GithubConfig, clientSecret string) (string, error) {
 	form := url.Values{}
 	form.Add("client_id", config.ClientID)
-	form.Add("client_secret", config.ClientSecret)
+	form.Add("client_secret", clientSecret)
 	form.Add("code", code)
 
 	url := g.getURL("TOKEN", config)

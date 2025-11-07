@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	apiv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	azuread "github.com/rancher/rancher/pkg/auth/providers/azure/clients"
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
 )
@@ -8,7 +9,7 @@ import (
 var (
 	// TypeToFields associates an Auth Config type with a set of secret names related to the config.
 	TypeToFields = map[string][]string{
-		client.GithubConfigType:          {client.GithubConfigFieldClientSecret},
+		client.GithubConfigType:          {apiv3.GithubConfigFieldClientSecret},
 		client.GithubAppConfigType:       {client.GithubAppConfigFieldClientSecret, client.GithubAppConfigFieldPrivateKey},
 		client.ActiveDirectoryConfigType: {client.ActiveDirectoryConfigFieldServiceAccountPassword},
 		client.AzureADConfigType:         {client.AzureADConfigFieldApplicationSecret},
