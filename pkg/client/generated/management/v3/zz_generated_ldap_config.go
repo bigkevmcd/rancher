@@ -14,6 +14,7 @@ const (
 	LdapConfigFieldCreated                         = "created"
 	LdapConfigFieldCreatorID                       = "creatorId"
 	LdapConfigFieldEnabled                         = "enabled"
+	LdapConfigFieldGithub                          = "github"
 	LdapConfigFieldGroupDNAttribute                = "groupDNAttribute"
 	LdapConfigFieldGroupMemberMappingAttribute     = "groupMemberMappingAttribute"
 	LdapConfigFieldGroupMemberUserAttribute        = "groupMemberUserAttribute"
@@ -34,8 +35,11 @@ const (
 	LdapConfigFieldServiceAccountDistinguishedName = "serviceAccountDistinguishedName"
 	LdapConfigFieldServiceAccountPassword          = "serviceAccountPassword"
 	LdapConfigFieldStartTLS                        = "starttls"
+	LdapConfigFieldState                           = "state"
 	LdapConfigFieldStatus                          = "status"
 	LdapConfigFieldTLS                             = "tls"
+	LdapConfigFieldTransitioning                   = "transitioning"
+	LdapConfigFieldTransitioningMessage            = "transitioningMessage"
 	LdapConfigFieldType                            = "type"
 	LdapConfigFieldUUID                            = "uuid"
 	LdapConfigFieldUserDisabledBitMask             = "userDisabledBitMask"
@@ -60,6 +64,7 @@ type LdapConfig struct {
 	Created                         string            `json:"created,omitempty" yaml:"created,omitempty"`
 	CreatorID                       string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
 	Enabled                         bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Github                          *GithubConfig     `json:"github,omitempty" yaml:"github,omitempty"`
 	GroupDNAttribute                string            `json:"groupDNAttribute,omitempty" yaml:"groupDNAttribute,omitempty"`
 	GroupMemberMappingAttribute     string            `json:"groupMemberMappingAttribute,omitempty" yaml:"groupMemberMappingAttribute,omitempty"`
 	GroupMemberUserAttribute        string            `json:"groupMemberUserAttribute,omitempty" yaml:"groupMemberUserAttribute,omitempty"`
@@ -80,8 +85,11 @@ type LdapConfig struct {
 	ServiceAccountDistinguishedName string            `json:"serviceAccountDistinguishedName,omitempty" yaml:"serviceAccountDistinguishedName,omitempty"`
 	ServiceAccountPassword          string            `json:"serviceAccountPassword,omitempty" yaml:"serviceAccountPassword,omitempty"`
 	StartTLS                        bool              `json:"starttls,omitempty" yaml:"starttls,omitempty"`
+	State                           string            `json:"state,omitempty" yaml:"state,omitempty"`
 	Status                          *AuthConfigStatus `json:"status,omitempty" yaml:"status,omitempty"`
 	TLS                             bool              `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Transitioning                   string            `json:"transitioning,omitempty" yaml:"transitioning,omitempty"`
+	TransitioningMessage            string            `json:"transitioningMessage,omitempty" yaml:"transitioningMessage,omitempty"`
 	Type                            string            `json:"type,omitempty" yaml:"type,omitempty"`
 	UUID                            string            `json:"uuid,omitempty" yaml:"uuid,omitempty"`
 	UserDisabledBitMask             int64             `json:"userDisabledBitMask,omitempty" yaml:"userDisabledBitMask,omitempty"`
