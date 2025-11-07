@@ -34,16 +34,6 @@ type ActiveDirectoryConfigList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// GithubConfigList is a list of GithubConfig resources
-type GithubConfigList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
-
-	Items []GithubConfig `json:"items"`
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // GoogleOauthConfigList is a list of GoogleOauthConfig resources
 type GoogleOauthConfigList struct {
 	metav1.TypeMeta `json:",inline"`
