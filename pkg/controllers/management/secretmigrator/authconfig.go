@@ -11,7 +11,6 @@ import (
 	"github.com/rancher/rancher/pkg/auth/providers/common"
 	client "github.com/rancher/rancher/pkg/client/generated/management/v3"
 	"github.com/rancher/rancher/pkg/namespace"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -202,7 +201,7 @@ func (h *handler) migrateOKTASecrets(unstructuredConfig runtime.Unstructured) (r
 	return oktaConfig, nil
 }
 
-func setUnstructuredStatus(unstructured runtime.Unstructured, key condition.Cond, value corev1.ConditionStatus) (runtime.Unstructured, error) {
+func setUnstructuredStatus(unstructured runtime.Unstructured, key condition.Cond, value metav1.ConditionStatus) (runtime.Unstructured, error) {
 	content := unstructured.UnstructuredContent()
 	status, ok := content["status"].(map[string]any)
 	if !ok {
@@ -215,15 +214,15 @@ func setUnstructuredStatus(unstructured runtime.Unstructured, key condition.Cond
 	}
 	var found bool
 	for i, cond := range authConfigStatus.Conditions {
-		if cond.Type == key {
+		if cond.Type == string(key) {
 			authConfigStatus.Conditions[i].Status = value
 			found = true
 			break
 		}
 	}
 	if !found {
-		authConfigStatus.Conditions = append(authConfigStatus.Conditions, apimgmtv3.AuthConfigConditions{
-			Type:   key,
+		authConfigStatus.Conditions = append(authConfigStatus.Conditions, metav1.Condition{
+			Type:   string(key),
 			Status: value,
 		})
 	}

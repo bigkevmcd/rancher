@@ -229,8 +229,8 @@ func TestShibbolethAuthConfigMigration(t *testing.T) {
 			name: "test migrating existing Shibboleth config",
 			authConfig: newTestShibbolethConfig(func(ac *apimgmtv3.AuthConfig) {
 				ac.Status = apimgmtv3.AuthConfigStatus{
-					Conditions: []apimgmtv3.AuthConfigConditions{
-						apimgmtv3.AuthConfigConditions{
+					Conditions: []metav1.Condition{
+						{
 							Type:           apimgmtv3.AuthConfigConditionSecretsMigrated,
 							Status:         "True",
 							LastUpdateTime: "2024-05-13T15:20:34+01:00",
@@ -261,8 +261,8 @@ func TestShibbolethAuthConfigMigration(t *testing.T) {
 			name: "test migrating Shibboleth with incorrect secret name",
 			authConfig: newTestShibbolethConfig(func(ac *apimgmtv3.AuthConfig) {
 				ac.Status = apimgmtv3.AuthConfigStatus{
-					Conditions: []apimgmtv3.AuthConfigConditions{
-						apimgmtv3.AuthConfigConditions{
+					Conditions: []etav1.Condition{
+						{
 							Type:           apimgmtv3.AuthConfigConditionSecretsMigrated,
 							Status:         "True",
 							LastUpdateTime: "2024-05-13T15:20:34+01:00",
@@ -287,8 +287,8 @@ func TestShibbolethAuthConfigMigration(t *testing.T) {
 			name: "test migrating Shibboleth with different secret name",
 			authConfig: newTestShibbolethConfig(func(ac *apimgmtv3.AuthConfig) {
 				ac.Status = apimgmtv3.AuthConfigStatus{
-					Conditions: []apimgmtv3.AuthConfigConditions{
-						apimgmtv3.AuthConfigConditions{
+					Conditions: []metav1.Condition{
+						{
 							Type:           apimgmtv3.AuthConfigConditionSecretsMigrated,
 							Status:         "True",
 							LastUpdateTime: "2024-05-13T15:20:34+01:00",
@@ -447,8 +447,8 @@ func TestOKTAAuthConfigMigration(t *testing.T) {
 					APIVersion: "management.cattle.io/v3",
 				},
 				Status: apimgmtv3.AuthConfigStatus{
-					Conditions: []apimgmtv3.AuthConfigConditions{
-						apimgmtv3.AuthConfigConditions{
+					Conditions: []metav1.Condition{
+						{
 							Type:               apimgmtv3.AuthConfigConditionSecretsMigrated,
 							Status:             "True",
 							LastUpdateTime:     "2024-05-13T15:20:34+01:00",

@@ -305,27 +305,7 @@ type AuthConfig struct {
 }
 
 type AuthConfigStatus struct {
-	Conditions []AuthConfigConditions `json:"conditions"`
-}
-
-type AuthConfigConditions struct {
-	// Type of condition
-	Type condition.Cond `json:"type"`
-
-	// Status of condition (one of True, False, Unknown)
-	Status v1.ConditionStatus `json:"status"`
-
-	// Last time the condition was updated
-	LastUpdateTime string `json:"lastUpdateTime,omitempty"`
-
-	// Last time the condition transitioned from one status to another
-	LastTransitionTime string `json:"lastTransitionTime,omitempty"`
-
-	// The reason for the condition's last transition
-	Reason string `json:"reason,omitempty"`
-
-	// Human-readable message indicating details about last transition
-	Message string `json:"message,omitempty"`
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 // +genclient
