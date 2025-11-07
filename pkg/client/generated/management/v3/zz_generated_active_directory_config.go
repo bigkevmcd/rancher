@@ -11,6 +11,7 @@ const (
 	ActiveDirectoryConfigFieldCreatorID                    = "creatorId"
 	ActiveDirectoryConfigFieldDefaultLoginDomain           = "defaultLoginDomain"
 	ActiveDirectoryConfigFieldEnabled                      = "enabled"
+	ActiveDirectoryConfigFieldGithub                       = "github"
 	ActiveDirectoryConfigFieldGroupDNAttribute             = "groupDNAttribute"
 	ActiveDirectoryConfigFieldGroupMemberMappingAttribute  = "groupMemberMappingAttribute"
 	ActiveDirectoryConfigFieldGroupMemberUserAttribute     = "groupMemberUserAttribute"
@@ -30,8 +31,11 @@ const (
 	ActiveDirectoryConfigFieldServiceAccountPassword       = "serviceAccountPassword"
 	ActiveDirectoryConfigFieldServiceAccountUsername       = "serviceAccountUsername"
 	ActiveDirectoryConfigFieldStartTLS                     = "starttls"
+	ActiveDirectoryConfigFieldState                        = "state"
 	ActiveDirectoryConfigFieldStatus                       = "status"
 	ActiveDirectoryConfigFieldTLS                          = "tls"
+	ActiveDirectoryConfigFieldTransitioning                = "transitioning"
+	ActiveDirectoryConfigFieldTransitioningMessage         = "transitioningMessage"
 	ActiveDirectoryConfigFieldType                         = "type"
 	ActiveDirectoryConfigFieldUUID                         = "uuid"
 	ActiveDirectoryConfigFieldUserDisabledBitMask          = "userDisabledBitMask"
@@ -55,6 +59,7 @@ type ActiveDirectoryConfig struct {
 	CreatorID                    string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
 	DefaultLoginDomain           string            `json:"defaultLoginDomain,omitempty" yaml:"defaultLoginDomain,omitempty"`
 	Enabled                      bool              `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Github                       *GithubConfig     `json:"github,omitempty" yaml:"github,omitempty"`
 	GroupDNAttribute             string            `json:"groupDNAttribute,omitempty" yaml:"groupDNAttribute,omitempty"`
 	GroupMemberMappingAttribute  string            `json:"groupMemberMappingAttribute,omitempty" yaml:"groupMemberMappingAttribute,omitempty"`
 	GroupMemberUserAttribute     string            `json:"groupMemberUserAttribute,omitempty" yaml:"groupMemberUserAttribute,omitempty"`
@@ -74,8 +79,11 @@ type ActiveDirectoryConfig struct {
 	ServiceAccountPassword       string            `json:"serviceAccountPassword,omitempty" yaml:"serviceAccountPassword,omitempty"`
 	ServiceAccountUsername       string            `json:"serviceAccountUsername,omitempty" yaml:"serviceAccountUsername,omitempty"`
 	StartTLS                     bool              `json:"starttls,omitempty" yaml:"starttls,omitempty"`
+	State                        string            `json:"state,omitempty" yaml:"state,omitempty"`
 	Status                       *AuthConfigStatus `json:"status,omitempty" yaml:"status,omitempty"`
 	TLS                          bool              `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Transitioning                string            `json:"transitioning,omitempty" yaml:"transitioning,omitempty"`
+	TransitioningMessage         string            `json:"transitioningMessage,omitempty" yaml:"transitioningMessage,omitempty"`
 	Type                         string            `json:"type,omitempty" yaml:"type,omitempty"`
 	UUID                         string            `json:"uuid,omitempty" yaml:"uuid,omitempty"`
 	UserDisabledBitMask          int64             `json:"userDisabledBitMask,omitempty" yaml:"userDisabledBitMask,omitempty"`

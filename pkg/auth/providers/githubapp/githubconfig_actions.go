@@ -106,7 +106,7 @@ func (g *Provider) testAndApply(request *types.APIContext) error {
 
 	if githubConfig.ClientSecret != "" {
 		value, err := common.ReadFromSecret(g.secrets, githubConfig.ClientSecret,
-			strings.ToLower(client.GithubConfigFieldClientSecret))
+			strings.ToLower(client.GithubAppConfigFieldClientSecret))
 		if err != nil {
 			return err
 		}
