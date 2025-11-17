@@ -3,6 +3,7 @@ package github
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -48,6 +49,7 @@ func (g *Provider) configureTest(request *types.APIContext) error {
 		return httperror.NewAPIError(httperror.InvalidBodyContent,
 			fmt.Sprintf("Failed to parse body: %v", err))
 	}
+	log.Printf("KEVIN!!!! %#v", githubConfig)
 	redirectURL := formGithubRedirectURL(githubConfig)
 
 	data := map[string]any{
