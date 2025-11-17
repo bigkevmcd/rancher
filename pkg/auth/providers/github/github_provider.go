@@ -24,6 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -84,6 +85,10 @@ func (g *Provider) CustomizeSchema(schema *types.Schema) {
 func (g *Provider) TransformToAuthProvider(authConfig map[string]any) (map[string]any, error) {
 	p := common.TransformToAuthProvider(authConfig)
 	p[publicclient.GithubProviderFieldRedirectURL] = formGithubRedirectURLFromMap(authConfig)
+
+	// TODO: Fix this?
+	tls, _, _ := unstructured.NestedBool(authConfig, "spec", "github", client.GithubConfigFieldTLS)
+	p["tls"] = tls
 	return p, nil
 }
 
