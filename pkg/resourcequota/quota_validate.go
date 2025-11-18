@@ -1,6 +1,7 @@
 package resourcequota
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -28,23 +29,24 @@ func GetProjectLock(projectID string) *sync.Mutex {
 
 func IsQuotaFit(nsLimit *v32.ResourceQuotaLimit, nsLimits []*v32.ResourceQuotaLimit, projectLimit *v32.ResourceQuotaLimit) (bool, api.ResourceList, error) {
 	nssResourceList := api.ResourceList{}
+
 	nsResourceList, err := ConvertLimitToResourceList(nsLimit)
 	if err != nil {
-		return false, nil, err
+		return false, nil, fmt.Errorf("checking quota fit: %w", err)
 	}
 	nssResourceList = quota.Add(nssResourceList, nsResourceList)
 
 	for _, nsLimit := range nsLimits {
 		nsResourceList, err := ConvertLimitToResourceList(nsLimit)
 		if err != nil {
-			return false, nil, err
+			return false, nil, fmt.Errorf("checking namespace limits: %w", err)
 		}
 		nssResourceList = quota.Add(nssResourceList, nsResourceList)
 	}
 
 	projectResourceList, err := ConvertLimitToResourceList(projectLimit)
 	if err != nil {
-		return false, nil, err
+		return false, nil, fmt.Errorf("checking project limits: %w", err)
 	}
 
 	_, exceeded := quota.LessThanOrEqual(nssResourceList, projectResourceList)
@@ -66,7 +68,7 @@ func ConvertLimitToResourceList(limit *v32.ResourceQuotaLimit) (api.ResourceList
 	for key, value := range converted {
 		q, err := resource.ParseQuantity(convert.ToString(value))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parsing quantity %q: %w", key, err)
 		}
 		toReturn[api.ResourceName(key)] = q
 	}
