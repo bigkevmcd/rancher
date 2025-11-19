@@ -2,12 +2,14 @@ package requests
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pkg/errors"
 	"github.com/rancher/norman/httperror"
 	ext "github.com/rancher/rancher/pkg/apis/ext.cattle.io/v1"
@@ -21,6 +23,7 @@ import (
 	exttokenstore "github.com/rancher/rancher/pkg/ext/stores/tokens"
 	mgmtcontrollers "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/oidc/provider"
 	"github.com/rancher/rancher/pkg/types/config"
 	"github.com/rancher/steve/pkg/auth"
 	"github.com/sirupsen/logrus"
@@ -38,6 +41,10 @@ var ErrMustAuthenticate = httperror.NewAPIError(httperror.Unauthorized, "must au
 // AuthTokenGetter retrieves a token from the request.
 type AuthTokenGetter interface {
 	TokenFromRequest(req *http.Request) (accessor.TokenAccessor, error)
+}
+
+type publicKeyGetter interface {
+	GetPublicKey(kid string) (*rsa.PublicKey, error)
 }
 
 // Authenticator authenticates a request.
@@ -69,6 +76,7 @@ type tokenAuthenticator struct {
 	refreshUser         func(userID string, force bool)
 	now                 func() time.Time // Make it easier to test.
 	extTokenStore       *exttokenstore.SystemStore
+	keyGetter           publicKeyGetter
 }
 
 // ToAuthMiddleware converts an Authenticator to an auth.Middleware.
@@ -115,6 +123,7 @@ func NewAuthenticator(ctx context.Context, clusterRouter ClusterRouter, mgmtCtx 
 		},
 		now:           time.Now,
 		extTokenStore: extTokenStore,
+		keyGetter:     provider.NewOIDCKeyClient(mgmtCtx.Wrangler.Core.Secret().Cache()),
 	}
 }
 
@@ -295,6 +304,39 @@ func getUserExtraInfo(token accessor.TokenAccessor, user *apiv3.User, attribs *a
 	return extraInfo
 }
 
+// TODO: Figure out how to share the validation elements
+func (a *tokenAuthenticator) parseTokenFromJWT(s string) (tokenName string, tokenKey string, err error) {
+	var claims struct {
+		jwt.RegisteredClaims
+		Token string `json:"token"`
+	}
+
+	_, err = jwt.ParseWithClaims(s, &claims, func(token *jwt.Token) (any, error) {
+		if kid, ok := token.Header["kid"]; ok {
+			publicKey, err := a.keyGetter.GetPublicKey(kid.(string))
+			if err != nil {
+				return nil, fmt.Errorf("getting PublicKey %q", kid)
+			}
+
+			return publicKey, nil
+		}
+
+		return nil, errors.New("missing kid in access token")
+	},
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}),
+		// TODO: Figure these out.
+	// jwt.WithAudience(c.ResourceURL),
+	// jwt.WithIssuer(c.AuthorizationServerURL),
+	)
+
+	if err != nil {
+		return "", "", fmt.Errorf("tokenAuthenticator parsing JWT: %w", err)
+	}
+
+	tokenName, tokenKey = tokens.SplitTokenParts(claims.Token)
+	return
+}
+
 // TokenFromRequest retrieves and verifies the token from the request.
 func (a *tokenAuthenticator) TokenFromRequest(req *http.Request) (accessor.TokenAccessor, error) {
 	tokenAuthValue := tokens.GetTokenAuthFromRequest(req)
@@ -304,7 +346,12 @@ func (a *tokenAuthenticator) TokenFromRequest(req *http.Request) (accessor.Token
 
 	tokenName, tokenKey := tokens.SplitTokenParts(tokenAuthValue)
 	if tokenName == "" || tokenKey == "" {
-		return nil, ErrMustAuthenticate
+		parsedTokenName, parsedTokenKey, err := a.parseTokenFromJWT(tokenAuthValue)
+		if err != nil {
+			// TODO: Log
+			return nil, ErrMustAuthenticate
+		}
+		tokenName, tokenKey = parsedTokenName, parsedTokenKey
 	}
 
 	lookupUsingClient := false
