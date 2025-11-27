@@ -324,9 +324,7 @@ func (a *tokenAuthenticator) parseTokenFromJWT(s string) (tokenName string, toke
 		return nil, errors.New("missing kid in access token")
 	},
 		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}),
-		// TODO: Figure these out.
-	// jwt.WithAudience(c.ResourceURL),
-	// jwt.WithIssuer(c.AuthorizationServerURL),
+		// TODO: What other validation can we do for this token?
 	)
 
 	if err != nil {
@@ -346,13 +344,17 @@ func (a *tokenAuthenticator) TokenFromRequest(req *http.Request) (accessor.Token
 
 	tokenName, tokenKey := tokens.SplitTokenParts(tokenAuthValue)
 	if tokenName == "" || tokenKey == "" {
+		logrus.Debug("Could not parse tokenName and tokenKey from request - attempting JWT authentication")
 		parsedTokenName, parsedTokenKey, err := a.parseTokenFromJWT(tokenAuthValue)
 		if err != nil {
-			// TODO: Log
+			logrus.Errorf("TokenFromRequest failed to parse JWT: %s", err)
 			return nil, ErrMustAuthenticate
 		}
+		logrus.Debug("Parsed tokenName and TokenKey from JWT")
 		tokenName, tokenKey = parsedTokenName, parsedTokenKey
 	}
+
+	logrus.Debugf("TokenFromRequest: Using tokenName %q", tokenName)
 
 	lookupUsingClient := false
 
