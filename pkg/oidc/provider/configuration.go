@@ -19,6 +19,8 @@ type OpenIDConfiguration struct {
 	UserInfoEndpoint string `json:"userinfo_endpoint"`
 	// JWKSURI is the jwksuri endpoint
 	JWKSURI string `json:"jwks_uri"`
+	// RegistrationEndpoint is the dynamic client registration endpoint
+	RegistrationEndpoint string `json:"registration_endpoint,omitempty"`
 	// ResponseTypesSupported response types supported, only 'code' is supported
 	ResponseTypesSupported []string `json:"response_types_supported"`
 	// SubjectTypesSupported subject types supported, only 'public' is supported
@@ -40,6 +42,7 @@ func openIDConfigurationEndpoint(w http.ResponseWriter, r *http.Request) {
 		TokenEndpoint:                     oidcProviderHost() + "/token",
 		JWKSURI:                           oidcProviderHost() + "/.well-known/jwks.json",
 		UserInfoEndpoint:                  oidcProviderHost() + "/userinfo",
+		RegistrationEndpoint:              oidcProviderHost() + "/register",
 		ResponseTypesSupported:            []string{"code"},
 		SubjectTypesSupported:             []string{"public"},
 		IDTokenSigningAlgsValuesSupported: []string{"RS256"},

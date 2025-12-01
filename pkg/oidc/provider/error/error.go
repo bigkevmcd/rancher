@@ -18,6 +18,8 @@ const (
 	InvalidScope = "invalid_scope"
 	// ServerError the authorization server encountered an unexpected condition that prevented it from fulfilling the request.
 	ServerError = "server_error"
+	// InvalidClientMetadata the value of one or more metadata fields is invalid and the server has rejected this request.
+	InvalidClientMetadata = "invalid_client_metadata"
 )
 
 // Error represents an error returned.

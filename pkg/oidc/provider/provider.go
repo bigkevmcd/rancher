@@ -28,10 +28,11 @@ const (
 )
 
 type Provider struct {
-	jwksHandler     *jwksHandler
-	authHandler     *authorizeHandler
-	tokenHandler    *tokenHandler
-	userInfoHandler *userInfoHandler
+	jwksHandler         *jwksHandler
+	authHandler         *authorizeHandler
+	tokenHandler        *tokenHandler
+	userInfoHandler     *userInfoHandler
+	registrationHandler *registrationHandler
 }
 
 func NewProvider(ctx context.Context, tokenCache wrangmgmtv3.TokenCache, tokenClient wrangmgmtv3.TokenClient, userLister wrangmgmtv3.UserCache, userAttributeLister wrangmgmtv3.UserAttributeCache, secretCache corecontrollers.SecretCache, secretClient corecontrollers.SecretClient, oidcClientCache wrangmgmtv3.OIDCClientCache, oidcClientController wrangmgmtv3.OIDCClientController, namespaceClient corecontrollers.NamespaceClient) (Provider, error) {
@@ -73,10 +74,11 @@ func NewProvider(ctx context.Context, tokenCache wrangmgmtv3.TokenCache, tokenCl
 	}
 
 	return Provider{
-		jwksHandler:     jwks,
-		authHandler:     newAuthorizeHandler(tokenCache, userLister, sessionStorage, &randomstring.Generator{}, oidcClientCache),
-		tokenHandler:    newTokenHandler(tokenCache, userLister, userAttributeLister, sessionStorage, jwks, oidcClientCache, oidcClientController, secretCache, tokenClient),
-		userInfoHandler: newUserInfoHandler(userLister, userAttributeLister, jwks),
+		jwksHandler:         jwks,
+		authHandler:         newAuthorizeHandler(tokenCache, userLister, sessionStorage, &randomstring.Generator{}, oidcClientCache),
+		tokenHandler:        newTokenHandler(tokenCache, userLister, userAttributeLister, sessionStorage, jwks, oidcClientCache, oidcClientController, secretCache, tokenClient),
+		userInfoHandler:     newUserInfoHandler(userLister, userAttributeLister, jwks),
+		registrationHandler: newRegistrationHandler(oidcClientController, oidcClientCache, secretClient, secretCache, &randomstring.Generator{}),
 	}, nil
 }
 
@@ -122,4 +124,6 @@ func (p *Provider) RegisterOIDCProviderHandles(mux *mux.Router) {
 	mux.HandleFunc("/oidc/authorize", p.middleware(p.authHandler.authEndpoint))
 	mux.HandleFunc("/oidc/token", p.middleware(p.tokenHandler.tokenEndpoint))
 	mux.HandleFunc("/oidc/userinfo", p.middleware(p.userInfoHandler.userInfoEndpoint))
+	// Dynamic Client Registration endpoint (RFC 7591)
+	mux.HandleFunc("POST /oidc/register", p.registrationHandler.registerEndpoint)
 }
