@@ -1,16 +1,20 @@
 package resourcequota
 
 import (
-	"go.uber.org/mock/gomock"
 	"reflect"
 	"testing"
+
+	"go.uber.org/mock/gomock"
 
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/wrangler/v3/pkg/generic/fake"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
 func TestSetValidated(t *testing.T) {
@@ -453,4 +457,58 @@ func TestZeroOutResourceQuotaLimit(t *testing.T) {
 			},
 		}, out)
 	})
+}
+
+func TestValidateAndSetNamespaceQuota(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	nsMock := fake.NewMockNonNamespacedControllerInterface[*corev1.Namespace, *corev1.NamespaceList](ctrl)
+	projectsMock := fake.NewMockCacheInterface[*v32.Project](ctrl)
+	projectsMock.EXPECT().Get(gomock.Any(), gomock.Any()).Return(&v32.Project{
+		Spec: v32.ProjectSpec{
+			ResourceQuota: &v32.ProjectResourceQuota{
+				Limit: v32.ResourceQuotaLimit{
+					LimitsCPU: "200m",
+					Extended: map[string]string{
+						"requests.nvidia.com/gpu": "2",
+					},
+				},
+			},
+		},
+	}, nil).AnyTimes()
+	nsMock.EXPECT().Update(gomock.Any()).DoAndReturn(func(ns *corev1.Namespace) (*corev1.Namespace, error) {
+		return ns, nil
+	}).Times(2)
+
+	indexers := map[string]cache.IndexFunc{
+		nsByProjectIndex: nsByProjectID,
+	}
+	fakeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	fakeIndexer.AddIndexers(indexers)
+
+	sc := SyncController{Namespaces: nsMock, ProjectCache: projectsMock, NsIndexer: fakeIndexer}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "test-ns-1",
+			Annotations: map[string]string{
+				projectIDAnnotation: "local:project1",
+			},
+		},
+	}
+	fakeIndexer.Add(ns)
+
+	isFit, validated, _, err := sc.validateAndSetNamespaceQuota(ns, &v32.NamespaceResourceQuota{
+		Limit: v32.ResourceQuotaLimit{
+			LimitsCPU:  "200m",
+			ConfigMaps: "5",
+			Extended: map[string]string{
+				"requests.nvidia.com/gpu": "2",
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.True(t, isFit)
+	assert.JSONEq(t, `{"limit":{"configMaps":"5","limitsCpu":"200m","extended":{"requests.nvidia.com/gpu":"2"}}}`,
+		validated.Annotations[resourceQuotaAnnotation])
 }
