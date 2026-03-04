@@ -157,7 +157,7 @@ func New(ctx context.Context, clientConfg clientcmd.ClientConfig, opts *Options)
 		}
 
 		if mutator.Annotations == nil {
-			mutator.Annotations = make(map[string]string, 1)
+			mutator.Annotations = make(map[string]string)
 		}
 		mutator.Annotations[namespace.AnnotationManagedNamespace] = namespace.AnnotationManagedNamespaceTrue
 
@@ -229,8 +229,9 @@ func New(ctx context.Context, clientConfg clientcmd.ClientConfig, opts *Options)
 		}
 	}
 
+	var sc *config.ScaledContext
 	if features.Auth.Enabled() {
-		sc, err := config.NewScaledContext(*restConfig, nil)
+		sc, err = config.NewScaledContext(*restConfig, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -367,12 +368,14 @@ func New(ctx context.Context, clientConfg clientcmd.ClientConfig, opts *Options)
 		return nil
 	})
 
-	wranglerContext.OnLeader(func(context.Context) error {
-		return cleanup.CleanupUnusedSecretTokens(
-			wranglerContext.Core.Secret(),
-			wranglerContext.Mgmt.AuthConfig(),
-		)
-	})
+	if sc != nil {
+		wranglerContext.OnLeader(func(context.Context) error {
+			return cleanup.CleanupUnusedSecretTokens(
+				wranglerContext.Core.Secret(),
+				sc.Management.AuthConfigs("").ObjectClient().UnstructuredClient(),
+			)
+		})
+	}
 
 	var telemetryManager telemetry.TelemetryExporterManager
 	// Only run when MCM is enabled but Agent is not - requires MCM for Cluster/Node access; fixes Harvester startup

@@ -4,22 +4,29 @@ import (
 	"errors"
 
 	"github.com/rancher/rancher/pkg/auth/api/secrets"
-	v3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/auth/providers/oidc"
 	wcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var cleanupProviders = []string{"genericoidc", "cognito"}
 
 const cleanedUpSecretsAnnotation = "auth.cattle.io/unused-secrets-cleaned"
 
+type genericClient interface {
+	Get(name string, opts metav1.GetOptions) (runtime.Object, error)
+	Update(name string, o runtime.Object) (runtime.Object, error)
+}
+
 // CleanupUnusedSecretTokens removes tokens from the cattle-system namespace that have
 // been removed from the PerUserCacheProviders.
 //
 // The AuthConfig is annotated to indicate that the secrets have been cleaned.
-func CleanupUnusedSecretTokens(secretsInterface wcorev1.SecretController, authConfigs v3.AuthConfigController) (cleanupErr error) {
+func CleanupUnusedSecretTokens(secretsInterface wcorev1.SecretController, authConfigs genericClient) (cleanupErr error) {
 	for _, name := range cleanupProviders {
-		authConfig, err := authConfigs.Cache().Get(name)
+		authConfig, err := oidc.GetOIDCConfig(name, authConfigs, nil)
 		if err != nil {
 			logrus.Errorf("getting AuthConfig %s: %s", name, err)
 			cleanupErr = errors.Join(cleanupErr, err)
@@ -42,7 +49,7 @@ func CleanupUnusedSecretTokens(secretsInterface wcorev1.SecretController, authCo
 		}
 
 		authConfig.Annotations[cleanedUpSecretsAnnotation] = "true"
-		if _, err := authConfigs.Update(authConfig); err != nil {
+		if _, err := authConfigs.Update(name, authConfig); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
 		}
 	}

@@ -2,16 +2,17 @@ package cleanup
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/tokens"
-	mgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	v1 "github.com/rancher/rancher/pkg/generated/norman/core/v1"
-	"github.com/rancher/wrangler/v3/pkg/generic/fake"
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestCleanupUnusedSecretTokens(t *testing.T) {
@@ -37,14 +38,12 @@ func TestCleanupUnusedSecretTokens(t *testing.T) {
 			},
 		},
 	}
-	authConfigStore := map[string]storedAuthConfig{
-		"genericoidc": {authConfig: &v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "genericoidc"}}, updated: true},
-		"cognito":     {authConfig: &v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "cognito"}}, updated: true},
-	}
 	ctrl := gomock.NewController(t)
+	fakeClient := newFakeGenericClient(t,
+		&v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "genericoidc"}},
+		&v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "cognito"}})
 
-	err := CleanupUnusedSecretTokens(getSecretControllerMock(ctrl, secretStore), getAuthConfigControllerMock(ctrl, authConfigStore))
-	if err != nil {
+	if err := CleanupUnusedSecretTokens(getSecretControllerMock(ctrl, secretStore), fakeClient); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,7 +52,7 @@ func TestCleanupUnusedSecretTokens(t *testing.T) {
 	}
 
 	for _, provider := range cleanupProviders {
-		if ann := authConfigStore[provider].authConfig.Annotations; ann[cleanedUpSecretsAnnotation] != "true" {
+		if ann := fakeClient.updated[provider].GetAnnotations(); ann[cleanedUpSecretsAnnotation] != "true" {
 			t.Errorf("didn't update the annotations: %#v", ann)
 		}
 	}
@@ -72,13 +71,12 @@ func TestCleanupUnusedSecretTokensHandlesErrors(t *testing.T) {
 			},
 		},
 	}
-	authConfigStore := map[string]storedAuthConfig{
-		"cognito":     {authConfig: &v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "cognito"}}, updated: false, err: errors.New("test error")},
-		"genericoidc": {authConfig: &v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "genericoidc"}}, updated: true},
-	}
-	ctrl := gomock.NewController(t)
+	fakeClient := newFakeGenericClient(t,
+		&v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "cognito"}},
+		&v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "genericoidc", Annotations: map[string]string{"fail": "true"}}})
 
-	err := CleanupUnusedSecretTokens(getSecretControllerMock(ctrl, secretStore), getAuthConfigControllerMock(ctrl, authConfigStore))
+	ctrl := gomock.NewController(t)
+	err := CleanupUnusedSecretTokens(getSecretControllerMock(ctrl, secretStore), fakeClient)
 	if msg := err.Error(); msg != "test error" {
 		t.Fatalf("got error %v", err)
 	}
@@ -89,8 +87,12 @@ func TestCleanupUnusedSecretTokensHandlesErrors(t *testing.T) {
 
 	for _, provider := range cleanupProviders {
 		// Only the non-erroring configs should be updated
-		if authConfigStore[provider].err == nil {
-			if ann := authConfigStore[provider].authConfig.Annotations; ann[cleanedUpSecretsAnnotation] != "true" {
+		if fakeClient.objects[provider].GetAnnotations()["fail"] == "true" {
+			if fakeClient.updated["provider"] != nil {
+				t.Errorf("updated a provider that failed: %s", provider)
+			}
+		} else {
+			if ann := fakeClient.updated[provider].GetAnnotations(); ann[cleanedUpSecretsAnnotation] != "true" {
 				t.Errorf("didn't update the annotations: %#v", ann)
 			}
 		}
@@ -110,21 +112,21 @@ func TestCleanupUnusedSecretTokensAlreadyAnnotated(t *testing.T) {
 			},
 		},
 	}
-	authConfigStore := map[string]storedAuthConfig{
-		"genericoidc": {
-			authConfig: &v3.AuthConfig{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "genericoidc",
-					Annotations: map[string]string{cleanedUpSecretsAnnotation: "true"},
-				},
+	authConfigs := []*v3.AuthConfig{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "genericoidc",
+				Annotations: map[string]string{cleanedUpSecretsAnnotation: "true"},
 			},
-			updated: false,
 		},
-		"cognito": {authConfig: &v3.AuthConfig{ObjectMeta: metav1.ObjectMeta{Name: "cognito"}}, updated: true},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "cognito"},
+		},
 	}
+	fakeClient := newFakeGenericClient(t, authConfigs...)
 	ctrl := gomock.NewController(t)
 
-	err := CleanupUnusedSecretTokens(getSecretControllerMock(ctrl, secretStore), getAuthConfigControllerMock(ctrl, authConfigStore))
+	err := CleanupUnusedSecretTokens(getSecretControllerMock(ctrl, secretStore), fakeClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,42 +135,55 @@ func TestCleanupUnusedSecretTokensAlreadyAnnotated(t *testing.T) {
 		t.Errorf("secrets were incorrectly deleted - remaining secrets = %d", l)
 	}
 
-	for _, provider := range cleanupProviders {
-		if ann := authConfigStore[provider].authConfig.Annotations; ann[cleanedUpSecretsAnnotation] != "true" {
-			t.Errorf("didn't update the annotations: %#v", ann)
-		}
-	}
-}
-
-type storedAuthConfig struct {
-	authConfig *v3.AuthConfig
-	updated    bool
-	err        error
-}
-
-func getAuthConfigControllerMock(ctrl *gomock.Controller, store map[string]storedAuthConfig) mgmtv3.AuthConfigController {
-	authConfigs := fake.NewMockNonNamespacedControllerInterface[*v3.AuthConfig, *v3.AuthConfigList](ctrl)
-	authConfigsCache := fake.NewMockNonNamespacedCacheInterface[*v3.AuthConfig](ctrl)
-	authConfigs.EXPECT().Cache().Return(authConfigsCache).Times(2)
-
-	for _, v := range store {
-		authConfigsCache.EXPECT().Get(gomock.Any()).DoAndReturn(func(name string) (*v3.AuthConfig, error) {
-			stored := store[name]
-			if stored.err != nil {
-				return nil, stored.err
+	for _, authConfig := range authConfigs {
+		if authConfig.Annotations[cleanedUpSecretsAnnotation] == "" {
+			if ann := fakeClient.updated[authConfig.GetName()].Annotations; ann[cleanedUpSecretsAnnotation] != "true" {
+				t.Errorf("didn't update the annotations: %#v", ann)
 			}
-			return stored.authConfig, nil
-		})
-
-		if v.updated {
-			authConfigs.EXPECT().Update(gomock.Any()).DoAndReturn(func(ac *v3.AuthConfig) (*v3.AuthConfig, error) {
-				stored := store[ac.GetName()]
-				stored.authConfig = ac
-				store[ac.GetName()] = stored
-				return ac, nil
-			})
 		}
 	}
+}
 
-	return authConfigs
+func newFakeGenericClient(t *testing.T, configs ...*v3.AuthConfig) *fakeGenericClient {
+	t.Helper()
+	client := &fakeGenericClient{
+		objects: map[string]*unstructured.Unstructured{},
+		updated: map[string]*v3.OIDCConfig{},
+	}
+
+	for _, config := range configs {
+		converted, err := runtime.DefaultUnstructuredConverter.ToUnstructured(config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client.objects[config.GetName()] = &unstructured.Unstructured{Object: converted}
+	}
+
+	return client
+}
+
+type fakeGenericClient struct {
+	objects map[string]*unstructured.Unstructured
+	updated map[string]*v3.OIDCConfig
+}
+
+func (m fakeGenericClient) Get(name string, opts metav1.GetOptions) (runtime.Object, error) {
+	if u, ok := m.objects[name]; ok {
+		return u, nil
+	}
+
+	return nil, fmt.Errorf("fake does not contain object: %s", name)
+}
+
+func (m fakeGenericClient) Update(name string, o runtime.Object) (runtime.Object, error) {
+	if _, ok := m.objects[name]; ok {
+		oc := o.(*v3.OIDCConfig)
+		if ann := oc.GetAnnotations(); ann["fail"] == "true" {
+			return nil, errors.New("test error")
+		}
+		m.updated[name] = oc
+		return o, nil
+	}
+
+	return nil, fmt.Errorf("updating fake does not contain object: %s", name)
 }

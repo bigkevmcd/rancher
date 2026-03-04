@@ -392,46 +392,7 @@ func (o *OpenIDCProvider) saveOIDCConfig(config *apiv3.OIDCConfig) error {
 }
 
 func (o *OpenIDCProvider) GetOIDCConfig() (*apiv3.OIDCConfig, error) {
-	authConfigObj, err := o.AuthConfigs.ObjectClient().UnstructuredClient().Get(o.Name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve OIDCConfig, error: %v", err)
-	}
-
-	u, ok := authConfigObj.(runtime.Unstructured)
-	if !ok {
-		return nil, fmt.Errorf("failed to retrieve OIDCConfig, cannot read k8s Unstructured data")
-	}
-	storedOidcConfigMap := u.UnstructuredContent()
-
-	storedOidcConfig := &apiv3.OIDCConfig{}
-	err = common.Decode(storedOidcConfigMap, storedOidcConfig)
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode OidcConfig: %w", err)
-	}
-	if storedOidcConfig.PKCEMethod != "" {
-		logrus.Debugf("GetOIDCConfig PKCE Enabled for %s", o.Name)
-	} else {
-		logrus.Debugf("GetOIDCConfig PKCE IS NOT Enabled %s", o.Name)
-	}
-
-	if storedOidcConfig.PrivateKey != "" {
-		value, err := common.ReadFromSecret(o.Secrets, storedOidcConfig.PrivateKey, strings.ToLower(client.OIDCConfigFieldPrivateKey))
-		if err != nil {
-			return nil, err
-		}
-		storedOidcConfig.PrivateKey = value
-	}
-	if storedOidcConfig.ClientSecret != "" {
-		data, err := common.ReadFromSecretData(o.Secrets, storedOidcConfig.ClientSecret)
-		if err != nil {
-			return nil, err
-		}
-		for _, v := range data {
-			storedOidcConfig.ClientSecret = string(v)
-		}
-	}
-
-	return storedOidcConfig, nil
+	return GetOIDCConfig(o.Name, o.AuthConfigs.ObjectClient().UnstructuredClient(), o.Secrets)
 }
 
 func (o *OpenIDCProvider) IsThisUserMe(me, other apiv3.Principal) bool {
@@ -985,4 +946,53 @@ func (v orderedValues) Encode() string {
 
 func (v *orderedValues) Add(key, value string) {
 	*v = append(*v, key, value)
+}
+
+type genericClient interface {
+	Get(name string, opts metav1.GetOptions) (runtime.Object, error)
+	Update(name string, o runtime.Object) (runtime.Object, error)
+}
+
+// GetOIDCConfig loads an OIDC AuthConfig.
+//
+// If the secrets controller is not provided the PrivateKey/SecretKey references
+// will not be loaded and updated.
+func GetOIDCConfig(name string, authConfigs genericClient, secrets wcorev1.SecretController) (*apiv3.OIDCConfig, error) {
+	authConfigObj, err := authConfigs.Get(name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve OIDCConfig, error: %v", err)
+	}
+
+	u, ok := authConfigObj.(runtime.Unstructured)
+	if !ok {
+		return nil, fmt.Errorf("failed to retrieve OIDCConfig, cannot read k8s Unstructured data")
+	}
+	storedOidcConfigMap := u.UnstructuredContent()
+
+	storedOidcConfig := &apiv3.OIDCConfig{}
+	err = common.Decode(storedOidcConfigMap, storedOidcConfig)
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode OidcConfig: %w", err)
+	}
+
+	if secrets != nil {
+		if storedOidcConfig.PrivateKey != "" {
+			value, err := common.ReadFromSecret(secrets, storedOidcConfig.PrivateKey, strings.ToLower(client.OIDCConfigFieldPrivateKey))
+			if err != nil {
+				return nil, err
+			}
+			storedOidcConfig.PrivateKey = value
+		}
+		if storedOidcConfig.ClientSecret != "" {
+			data, err := common.ReadFromSecretData(secrets, storedOidcConfig.ClientSecret)
+			if err != nil {
+				return nil, err
+			}
+			for _, v := range data {
+				storedOidcConfig.ClientSecret = string(v)
+			}
+		}
+	}
+
+	return storedOidcConfig, nil
 }
