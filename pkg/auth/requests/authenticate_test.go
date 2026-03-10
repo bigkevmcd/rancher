@@ -1346,6 +1346,47 @@ func TestAuthenticateWithAccessTokenAndOIDCEnabled(t *testing.T) {
 		require.Nil(t, resp)
 	})
 
+	t.Run("with access token not issued by rancher", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		tokenIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+		tokenIndexer.AddIndexers(cache.Indexers{tokenKeyIndex: tokenKeyIndexer})
+		privateKey := testGeneratePrivateKey(t)
+
+		signingKeyGetter := mocks.NewMocksigningKeyGetter(ctrl)
+		signingKeyGetter.EXPECT().GetPublicKey("unknown").Times(0)
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, &authorizationTokenClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				Issuer:    "https://not-valid.example.com/oidc",
+				ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				Audience:  []string{"test-client-id"},
+			},
+			Token: "test-token",
+		})
+		accessToken.Header["kid"] = "mZtQBcAts_"
+		signedToken, err := accessToken.SignedString(privateKey)
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodGet, "/v1/namespaces", nil)
+		req.Header.Set("Authorization", "Bearer "+signedToken)
+
+		authenticator := tokenAuthenticator{
+			ctx:          t.Context(),
+			tokenIndexer: tokenIndexer,
+			now: func() time.Time {
+				return now
+			},
+			keyGetter:       signingKeyGetter,
+			oidcClientCache: fake.NewMockNonNamespacedCacheInterface[*v3.OIDCClient](ctrl),
+		}
+
+		resp, err := authenticator.Authenticate(req)
+		// This is because we're still using github.com/pkg/errors and so can't
+		// use require.ErrorsIs.
+		require.ErrorContains(t, err, ErrMustAuthenticate.Error())
+		require.Nil(t, resp)
+	})
+
 	t.Run("with valid access token", func(t *testing.T) {
 		token := &v3.Token{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1630,7 +1671,7 @@ func TestAuthenticateWithAccessTokenAndOIDCDisabled(t *testing.T) {
 // This test verifies that parseTokenFromJWT handles non-string kid values
 // without panicking. A malformed JWT could have a kid that is a number,
 // boolean, or other type instead of a string.
-func Test_tokenAuthenticator_parseTokenFromJWT_NonStringKid(t *testing.T) {
+func TestTokenAuthenticatorParseTokenFromJWT_NonStringKid(t *testing.T) {
 	previousOIDCProvider := features.OIDCProvider.Enabled()
 	features.OIDCProvider.Set(true)
 	t.Cleanup(func() {
@@ -1672,6 +1713,47 @@ func Test_tokenAuthenticator_parseTokenFromJWT_NonStringKid(t *testing.T) {
 	claims, err := authenticator.parseTokenFromJWT(signedToken)
 	require.Contains(t, err.Error(), "kid header must be a string")
 	require.Nil(t, claims)
+}
+
+func TestAuthenticateWithKIDFromDifferentIssuer(t *testing.T) {
+	previousOIDCProvider := features.OIDCProvider.Enabled()
+	features.OIDCProvider.Set(true)
+	t.Cleanup(func() {
+		features.OIDCProvider.Set(previousOIDCProvider)
+	})
+
+	now := time.Now()
+	ctrl := gomock.NewController(t)
+	privateKey := testGeneratePrivateKey(t)
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, &authorizationTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "https://not-valid.example.com/oidc",
+			ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Audience:  []string{"test-client-id"},
+		},
+		Token: "test-token",
+	})
+	token.Header["kid"] = "mZtQBcAts_"
+
+	signedToken, err := token.SignedString(privateKey)
+	require.NoError(t, err)
+
+	signingKeyGetter := mocks.NewMocksigningKeyGetter(ctrl)
+	// The GetPublicKey should not be called since we should detect the type error first
+
+	authenticator := tokenAuthenticator{
+		ctx:       context.Background(),
+		keyGetter: signingKeyGetter,
+		now: func() time.Time {
+			return now
+		},
+	}
+
+	claims, err := authenticator.parseTokenFromJWT(signedToken)
+	require.NoError(t, err)
+	assert.NotNil(t, claims)
 }
 
 func testGeneratePrivateKey(t *testing.T) *rsa.PrivateKey {

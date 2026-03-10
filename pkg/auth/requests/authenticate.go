@@ -42,6 +42,8 @@ const tokenKeyIndex = "authn.management.cattle.io/token-key-index"
 // be authenticated.
 var ErrMustAuthenticate = httperror.NewAPIError(httperror.Unauthorized, "must authenticate")
 
+var errNotRancherIssuer = errors.New("jwt token not issued by rancher")
+
 // AuthTokenGetter retrieves a token from the request.
 type AuthTokenGetter interface {
 	TokenFromRequest(req *http.Request) (accessor.TokenAccessor, error)
@@ -327,7 +329,23 @@ func getUserExtraInfo(token accessor.TokenAccessor, user *apiv3.User, attribs *a
 
 func (a *tokenAuthenticator) parseTokenFromJWT(s string) (*authorizationTokenClaims, error) {
 	var claims authorizationTokenClaims
-	_, err := jwt.ParseWithClaims(s, &claims, func(token *jwt.Token) (any, error) {
+	rancherIssuer := settings.ServerURL.Get() + "/oidc"
+
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}),
+		jwt.WithIssuer(settings.ServerURL.Get()+"/oidc"),
+	)
+	_, err := parser.ParseWithClaims(s, &claims, func(token *jwt.Token) (any, error) {
+		tokenIssuer, err := token.Claims.GetIssuer()
+		if err != nil {
+			return nil, fmt.Errorf("getting issuer from claim in bearer token: %w", err)
+		}
+		if tokenIssuer != rancherIssuer {
+			// We don't have a key that can be used to verify the signature of
+			// this token.
+			return nil, errNotRancherIssuer
+		}
+
 		if kid, ok := token.Header["kid"]; ok {
 			kidStr, ok := kid.(string)
 			if !ok {
@@ -342,13 +360,12 @@ func (a *tokenAuthenticator) parseTokenFromJWT(s string) (*authorizationTokenCla
 		}
 
 		return nil, errors.New("missing kid in access token")
-	},
-		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}),
-		jwt.WithIssuer(settings.ServerURL.Get()+"/oidc"),
-	)
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("tokenAuthenticator parsing JWT: %w", err)
+		if !errors.Is(err, errNotRancherIssuer) {
+			return nil, fmt.Errorf("tokenAuthenticator parsing JWT: %w", err)
+		}
 	}
 
 	return &claims, nil
