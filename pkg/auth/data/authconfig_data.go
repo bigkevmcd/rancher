@@ -25,7 +25,8 @@ import (
 )
 
 func AuthConfigs(management *config.ManagementContext) error {
-	if err := addAuthConfig(github.Name, client.GithubConfigType, false, management); err != nil {
+	// TODO: This is the initial creation so DefaultName is fine here.
+	if err := addAuthConfig(github.DefaultName, client.GithubConfigType, false, management); err != nil {
 		return err
 	}
 
