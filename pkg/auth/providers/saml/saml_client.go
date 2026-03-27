@@ -74,7 +74,6 @@ func getRouteHandler(name string) http.HandlerFunc {
 // creates or updates the associated in-memory information. It is called from the
 // auth samlconfig controller when a SAML configuration was changed.
 func InitializeSamlServiceProvider(configToSet *apiv3.SamlConfig, name string) error {
-
 	initMu.Lock()
 	defer initMu.Unlock()
 
@@ -100,46 +99,16 @@ func InitializeSamlServiceProvider(configToSet *apiv3.SamlConfig, name string) e
 	}
 
 	if configToSet.SpKey != "" {
-		// used from ssh.ParseRawPrivateKey
-
-		block, _ := pem.Decode([]byte(configToSet.SpKey))
-		if block == nil {
-			return fmt.Errorf("SAML: no key found")
-		}
-
-		if strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED") {
-			return fmt.Errorf("SAML: cannot decode encrypted private keys")
-		}
-
-		switch block.Type {
-		case "RSA PRIVATE KEY":
-			privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-			if err != nil {
-				return fmt.Errorf("SAML: error parsing PKCS1 RSA key: %v", err)
-			}
-		case "PRIVATE KEY":
-			pk, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-			if err != nil {
-				return fmt.Errorf("SAML: error parsing PKCS8 RSA key: %v", err)
-			}
-			privKey, ok = pk.(*rsa.PrivateKey)
-			if !ok {
-				return fmt.Errorf("SAML: unable to get rsa key")
-			}
-		default:
-			return fmt.Errorf("SAML: unsupported key type %q", block.Type)
+		privKey, err = parsePrivateKeyFromPEM(configToSet.SpKey)
+		if err != nil {
+			return err
 		}
 	}
 
 	if configToSet.SpCert != "" {
-		block, _ := pem.Decode([]byte(configToSet.SpCert))
-		if block == nil {
-			return fmt.Errorf("SAML: failed to parse PEM block containing the private key")
-		}
-
-		cert, err = x509.ParseCertificate(block.Bytes)
+		cert, err = parseCertificate(configToSet.SpCert)
 		if err != nil {
-			return fmt.Errorf("SAML: failed to parse DER encoded public key: %w", err)
+			return err
 		}
 	}
 
@@ -268,6 +237,52 @@ func InitializeSamlServiceProvider(configToSet *apiv3.SamlConfig, name string) e
 	return nil
 }
 
+func parseCertificate(spCert string) (*x509.Certificate, error) {
+	block, _ := pem.Decode([]byte(spCert))
+	if block == nil {
+		return nil, fmt.Errorf("SAML: failed to parse PEM block containing the private key")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("SAML: failed to parse DER encoded public key: %w", err)
+	}
+
+	return cert, nil
+}
+
+func parsePrivateKeyFromPEM(pemPrivateKey string) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(pemPrivateKey))
+	if block == nil {
+		return nil, fmt.Errorf("SAML: no key found")
+	}
+
+	if strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED") {
+		return nil, fmt.Errorf("SAML: cannot decode encrypted private keys")
+	}
+
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("SAML: error parsing PKCS1 RSA key: %w", err)
+		}
+		return privKey, nil
+	case "PRIVATE KEY":
+		pk, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("SAML: error parsing PKCS8 RSA key: %w", err)
+		}
+		privKey, ok := pk.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("SAML: unable to parse RSA key")
+		}
+		return privKey, nil
+	default:
+		return nil, fmt.Errorf("SAML: unsupported key type %q", block.Type)
+	}
+}
+
 func AuthHandler() http.Handler {
 	log.Debugf("SAML [AuthHandler]: Setting up /v1-saml routes, mux is %p", root)
 
@@ -297,6 +312,11 @@ func AuthHandler() http.Handler {
 	root.HandleFunc("POST /v1-saml/okta/saml/slo", getRouteHandler("OktaSLO"))
 	root.HandleFunc("GET /v1-saml/okta/saml/slo", getRouteHandler("OktaSLOGet"))
 	root.HandleFunc("GET /v1-saml/okta/saml/metadata", getRouteHandler("OktaMetadata"))
+
+	root.HandleFunc("POST /v1-saml/okta/saml/{configName}/acs", getRouteHandler("OktaACS"))
+	root.HandleFunc("POST /v1-saml/okta/saml/{configName}/slo", getRouteHandler("OktaSLO"))
+	root.HandleFunc("GET /v1-saml/okta/saml/{configName}/slo", getRouteHandler("OktaSLOGet"))
+	root.HandleFunc("GET /v1-saml/okta/saml/{configName}/metadata", getRouteHandler("OktaMetadata"))
 
 	root.HandleFunc("POST /v1-saml/shibboleth/saml/acs", getRouteHandler("ShibbolethACS"))
 	root.HandleFunc("POST /v1-saml/shibboleth/saml/slo", getRouteHandler("ShibbolethSLO"))
@@ -383,7 +403,6 @@ func (s *Provider) FinalizeSamlLogout(w http.ResponseWriter, r *http.Request) {
 		if errParse != nil {
 			// The redirect url is bad. That is bad for error reporting.
 			// We go with the old string ops, and pray.
-
 			redirectURL += "&errorCode=500&err=" + url.QueryEscape(err.Error())
 		} else {
 			// Principled extension of a good url with the error information

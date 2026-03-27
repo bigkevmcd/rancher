@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -26,10 +27,11 @@ func (g *googleOauthProvider) getUserInfoAndGroups(adminSvc *admin.Service, gOAu
 	}
 	if testAndEnableAction {
 		if user.HostedDomain != config.Hostname {
+			log.Printf("KEVIN!!!! user.HostedDomain = %s, config.Hostname = %s", user.HostedDomain, config.Hostname)
 			return userPrincipal, groupPrincipals, fmt.Errorf("invalid hostname provided")
 		}
 	}
-	userPrincipal = g.toPrincipal(userType, *user, nil)
+	userPrincipal = g.toPrincipal(userType, *user, config.GetName(), nil)
 	userPrincipal.Me = true
 	logrus.Debugf("[Google OAuth] loginuser: Obtained userinfo using oauth access token")
 
@@ -94,7 +96,7 @@ func (g *googleOauthProvider) getGroupsUserBelongsTo(adminSvc *admin.Service, us
 	}
 	for _, gr := range groups {
 		group := Account{Name: gr.Name, Email: gr.Email, SubjectUniqueID: gr.Id}
-		groupPrincipal := g.toPrincipal(groupType, group, nil)
+		groupPrincipal := g.toPrincipal(groupType, group, config.GetName(), nil)
 		groupPrincipal.MemberOf = true
 		groupPrincipals = append(groupPrincipals, groupPrincipal)
 	}
@@ -164,6 +166,7 @@ func (g *googleOauthProvider) searchUsers(adminSvc *admin.Service, searchKey str
 		}
 		accounts = append(accounts, a)
 	}
+
 	return accounts, nil
 }
 

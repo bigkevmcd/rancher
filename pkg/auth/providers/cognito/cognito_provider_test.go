@@ -29,12 +29,16 @@ func TestLogoutAllWhenNotEnabled(t *testing.T) {
 		s.EndSessionEndpoint = "http://localhost:8090/user/logout"
 		s.LogoutAllEnabled = false
 	})
-	testToken := &v3.Token{UserID: userId, AuthProvider: providerName}
+	testToken := &v3.Token{
+		UserPrincipal: v3.Principal{Name: "cognito_user://123456"},
+		UserID:        userId,
+		AuthProvider:  providerName,
+	}
 	o := CognitoProvider{
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: oidc.OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+				GetConfig: func(string) (*v3.OIDCConfig, error) { return oidcConfig, nil },
 			},
 		},
 	}
@@ -64,7 +68,7 @@ func TestLogoutAll(t *testing.T) {
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: oidc.OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+				GetConfig: func(string) (*v3.OIDCConfig, error) { return oidcConfig, nil },
 			},
 		},
 	}
@@ -101,7 +105,7 @@ func TestLogoutAllNoEndSessionEndpoint(t *testing.T) {
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: oidc.OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+				GetConfig: func(string) (*v3.OIDCConfig, error) { return oidcConfig, nil },
 			},
 		},
 	}
@@ -145,7 +149,7 @@ func TestLogout(t *testing.T) {
 				GenOIDCProvider: genericoidc.GenOIDCProvider{
 					OpenIDCProvider: oidc.OpenIDCProvider{
 						Name:      providerName,
-						GetConfig: func() (*v3.OIDCConfig, error) { return tt.config, nil },
+						GetConfig: func(string) (*v3.OIDCConfig, error) { return tt.config, nil },
 					},
 				},
 			}

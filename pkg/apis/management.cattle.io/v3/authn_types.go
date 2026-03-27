@@ -389,6 +389,8 @@ type GithubConfigApplyInput struct {
 	GithubConfig GithubConfig `json:"githubConfig,omitempty"`
 	Code         string       `json:"code,omitempty"`
 	Enabled      bool         `json:"enabled,omitempty"`
+	// ConfigName is the name of the AuthConfig to create.
+	ConfigName string `json:"configName,omitempty"`
 }
 
 // +genclient
@@ -431,6 +433,9 @@ type GithubAppConfigApplyInput struct {
 	GithubConfig GithubAppConfig `json:"githubConfig,omitempty"`
 	Code         string          `json:"code,omitempty"`
 	Enabled      bool            `json:"enabled,omitempty"`
+
+	// ConfigName is the name of the AuthConfig to create.
+	ConfigName string `json:"configName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -454,6 +459,9 @@ type GoogleOauthConfigApplyInput struct {
 	GoogleOauthConfig GoogleOauthConfig `json:"googleOauthConfig,omitempty"`
 	Code              string            `json:"code,omitempty"`
 	Enabled           bool              `json:"enabled,omitempty"`
+
+	// ConfigName is the name of the AuthConfig to create.
+	ConfigName string `json:"configName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -490,8 +498,9 @@ type AzureADConfigTestOutput struct {
 }
 
 type AzureADConfigApplyInput struct {
-	Config AzureADConfig `json:"config,omitempty"`
-	Code   string        `json:"code,omitempty"`
+	Config     AzureADConfig `json:"config,omitempty"`
+	Code       string        `json:"code,omitempty"`
+	ConfigName string        `json:"configName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -553,6 +562,9 @@ type ActiveDirectoryTestAndApplyInput struct {
 	Username              string                `json:"username"`
 	Password              string                `json:"password"`
 	Enabled               bool                  `json:"enabled,omitempty"`
+
+	// ConfigName is the name of the AuthConfig to create.
+	ConfigName string `json:"configName,omitempty"`
 }
 
 type LdapFields struct {
@@ -620,6 +632,9 @@ type LdapTestAndApplyInput struct {
 	LdapConfig `json:"ldapConfig,omitempty"`
 	Username   string `json:"username"`
 	Password   string `json:"password" norman:"type=password,required"`
+
+	// ConfigName is the name of the AuthConfig to create.
+	ConfigName string `json:"configName,omitempty"`
 }
 
 type OpenLdapConfig struct {
@@ -795,6 +810,9 @@ type OIDCApplyInput struct {
 	OIDCConfig OIDCConfig `json:"oidcConfig,omitempty"`
 	Code       string     `json:"code,omitempty"`
 	Enabled    bool       `json:"enabled,omitempty"`
+
+	// ConfigName is the name of the AuthConfig to create.
+	ConfigName string `json:"configName"`
 }
 
 // +genclient

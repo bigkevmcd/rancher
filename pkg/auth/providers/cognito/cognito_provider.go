@@ -61,29 +61,35 @@ func (p *CognitoProvider) UsesUserSecrets() bool      { return true }
 func (p *CognitoProvider) CanRefreshPrincipals() bool { return true }
 
 func (p *CognitoProvider) Logout(w http.ResponseWriter, r *http.Request, token accessor.TokenAccessor) error {
-	providerName := token.GetAuthProvider()
-	logrus.Debugf("CognitoProvider [logout]: triggered by provider %s", providerName)
-	oidcConfig, err := p.GetConfig()
+	configName, err := common.ConfigNameFromToken(token)
+	if err != nil {
+		return err
+	}
+	logrus.Debugf("CognitoProvider [logout]: triggered by provider %s", configName)
+	oidcConfig, err := p.GetConfig(configName)
 	if err != nil {
 		return fmt.Errorf("getting config for OIDC Logout: %w", err)
 	}
 	if oidcConfig.LogoutAllForced {
-		return fmt.Errorf("CognitoProvider [logout]: Rancher provider resource `%v` configured for forced SLO, rejecting regular logout", providerName)
+		return fmt.Errorf("CognitoProvider [logout]: Rancher provider resource `%v` configured for forced SLO, rejecting regular logout", configName)
 	}
 
 	return nil
 }
 
 func (p *CognitoProvider) LogoutAll(w http.ResponseWriter, r *http.Request, token accessor.TokenAccessor) error {
-	logrus.Debugf("CognitoProvider [logout-all]: triggered by provider %s", token.GetAuthProvider())
-	oidcConfig, err := p.GetConfig()
+	configName, err := common.ConfigNameFromToken(token)
+	if err != nil {
+		return err
+	}
+	logrus.Debugf("CognitoProvider [logout-all]: triggered by provider %s", configName)
+	oidcConfig, err := p.GetConfig(configName)
 	if err != nil {
 		return err
 	}
 
-	providerName := token.GetAuthProvider()
 	if !oidcConfig.LogoutAllEnabled {
-		return fmt.Errorf("CognitoProvider [logout-all]: Rancher provider resource `%v` not configured for SLO", providerName)
+		return fmt.Errorf("CognitoProvider [logout-all]: Rancher provider resource `%v` not configured for SLO", configName)
 	}
 
 	idpRedirectURL, err := createIDPRedirectURL(r, oidcConfig)

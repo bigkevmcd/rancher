@@ -1,8 +1,11 @@
 package googleoauth
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -23,7 +26,7 @@ func (g *googleOauthProvider) formatter(apiContext *types.APIContext, resource *
 }
 
 func (g *googleOauthProvider) actionHandler(actionName string, action *types.Action, request *types.APIContext) error {
-	handled, err := common.HandleCommonAction(actionName, action, request, Name, g.authConfigs)
+	handled, err := common.HandleCommonAction(actionName, action, request, ProviderName, g.authConfigs)
 	if err != nil {
 		return err
 	}
@@ -62,14 +65,31 @@ func (g *googleOauthProvider) configureTest(request *types.APIContext) error {
 }
 
 func (g *googleOauthProvider) testAndApply(request *types.APIContext) error {
-	var googleOAuthConfig apiv3.GoogleOauthConfig
-	googleOAuthConfigApplyInput := &apiv3.GoogleOauthConfigApplyInput{}
-	if err := json.NewDecoder(request.Request.Body).Decode(googleOAuthConfigApplyInput); err != nil {
-		return httperror.NewAPIError(httperror.InvalidBodyContent,
-			fmt.Sprintf("[Google OAuth] testAndApply: Failed to parse body: %v", err))
+	b, err := io.ReadAll(request.Request.Body)
+	if err != nil {
+		return err
 	}
 
+	log.Printf("KEVIN!!!! received %s", b)
+
+	var googleOAuthConfig apiv3.GoogleOauthConfig
+	googleOAuthConfigApplyInput := &apiv3.GoogleOauthConfigApplyInput{}
+	if err := json.Unmarshal(b, &googleOAuthConfigApplyInput); err != nil {
+		return err
+	}
+
+	log.Printf("KEVIN!!! decoded %#v", googleOAuthConfigApplyInput)
+
+	// if err := json.NewDecoder(request.Request.Body).Decode(googleOAuthConfigApplyInput); err != nil {
+	// 	return httperror.NewAPIError(httperror.InvalidBodyContent,
+	// 		fmt.Sprintf("[Google OAuth] testAndApply: Failed to parse body: %v", err))
+	// }
+
+	// TODO: Fix this when the front-end is sending the ConfigName
 	googleOAuthConfig = googleOAuthConfigApplyInput.GoogleOauthConfig
+	configName := cmp.Or(googleOAuthConfigApplyInput.ConfigName, strings.ToLower(strings.TrimSuffix(googleOAuthConfigApplyInput.GoogleOauthConfig.AuthConfig.Type, "Config")))
+	googleOAuthConfig.ObjectMeta.Name = configName
+
 	googleLogin := &apiv3.GoogleOauthLogin{
 		Code: googleOAuthConfigApplyInput.Code,
 	}
