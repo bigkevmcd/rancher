@@ -490,7 +490,7 @@ func (p *mockLdapProvider) GetUserExtraAttributesFromToken(token accessor.TokenA
 	panic("GetUserExtraAttributesFromToken Unimplemented!")
 }
 
-func (p *mockLdapProvider) IsDisabledProvider() (bool, error) {
+func (p *mockLdapProvider) IsDisabledProvider(string) (bool, error) {
 	panic("IsDisabledProvider Unimplemented!")
 }
 

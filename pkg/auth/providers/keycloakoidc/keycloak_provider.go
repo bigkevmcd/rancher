@@ -26,9 +26,9 @@ import (
 )
 
 const (
-	Name      = "keycloakoidc"
-	UserType  = "user"
-	GroupType = "group"
+	ProviderName = "keycloakoidc"
+	UserType     = "user"
+	GroupType    = "group"
 )
 
 type keyCloakOIDCProvider struct {
@@ -38,7 +38,7 @@ type keyCloakOIDCProvider struct {
 func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.Manager, tokenMGR *tokens.Manager) common.AuthProvider {
 	p := &keyCloakOIDCProvider{
 		oidc.OpenIDCProvider{
-			Name:        Name,
+			Name:        ProviderName,
 			Type:        client.KeyCloakOIDCConfigType,
 			CTX:         ctx,
 			AuthConfigs: mgmtCtx.Management.AuthConfigs(""),
@@ -53,7 +53,7 @@ func Configure(ctx context.Context, mgmtCtx *config.ScaledContext, userMGR user.
 }
 
 func (k *keyCloakOIDCProvider) GetName() string {
-	return Name
+	return ProviderName
 }
 
 func (k *keyCloakOIDCProvider) newClient(config *apiv3.OIDCConfig, token accessor.TokenAccessor) (*KeyCloakClient, error) {
@@ -95,7 +95,7 @@ func (k *keyCloakOIDCProvider) SearchPrincipals(searchValue, principalType strin
 	var principals []apiv3.Principal
 	var err error
 
-	config, err := k.GetConfig()
+	config, err := k.GetConfig(token.GetAuthProvider())
 	if err != nil {
 		return principals, err
 	}
@@ -157,7 +157,7 @@ func (k *keyCloakOIDCProvider) toPrincipal(principalType string, acct account, t
 }
 
 func (k *keyCloakOIDCProvider) GetPrincipal(principalID string, token accessor.TokenAccessor) (apiv3.Principal, error) {
-	config, err := k.GetOIDCConfig()
+	config, err := k.GetOIDCConfig(token.GetAuthProvider())
 	if err != nil {
 		return apiv3.Principal{}, err
 	}

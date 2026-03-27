@@ -523,7 +523,12 @@ func (p *ldapProvider) permissionCheck(attributes []*ldapv3.EntryAttribute, conf
 }
 
 func (p *ldapProvider) RefetchGroupPrincipals(principalID string, secret string) ([]v3.Principal, error) {
-	config, caPool, err := p.getLDAPConfig(p.authConfigs.ObjectClient().UnstructuredClient())
+	provider, _, _, err := common.SplitPrincipalID(principalID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid principal: %s", principalID)
+	}
+
+	config, caPool, err := p.getLDAPConfig(p.authConfigs.ObjectClient().UnstructuredClient(), provider)
 	if err != nil {
 		return nil, err
 	}

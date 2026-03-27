@@ -159,7 +159,8 @@ func providerInputForType(providerType string) loginAccessor {
 		}
 	case client.GithubProviderType:
 		return &apiv3.GithubLogin{
-			GenericLogin: apiv3.GenericLogin{Type: providerType, Name: github.Name},
+			// TODO: This needs fixed
+			GenericLogin: apiv3.GenericLogin{Type: providerType, Name: github.ProviderName},
 		}
 	case client.GithubAppProviderType:
 		return &apiv3.GithubLogin{
@@ -216,7 +217,7 @@ func providerInputForType(providerType string) loginAccessor {
 		}
 	case client.KeyCloakOIDCProviderType:
 		return &apiv3.OIDCLogin{
-			GenericLogin: apiv3.GenericLogin{Type: providerType, Name: keycloakoidc.Name},
+			GenericLogin: apiv3.GenericLogin{Type: providerType, Name: keycloakoidc.ProviderName},
 		}
 	case client.GenericOIDCProviderType:
 		return &apiv3.OIDCLogin{
@@ -261,7 +262,7 @@ func (h *loginHandler) login(w http.ResponseWriter, r *http.Request, input login
 		return
 	}
 
-	userPrincipal, groupPrincipals, providerToken, err := providers.AuthenticateUser(w, r, input, input.GetName())
+	userPrincipal, groupPrincipals, providerToken, err := providers.AuthenticateUser(w, r, input, input.GetType())
 	if err != nil {
 		if !util.IsAPIError(err) {
 			logrus.Errorf("login: Error authenticating user: %s", err)
@@ -299,7 +300,7 @@ func (h *loginHandler) login(w http.ResponseWriter, r *http.Request, input login
 		}
 
 		loginTime := time.Now()
-		userExtraInfo := providers.GetUserExtraAttributes(input.GetName(), userPrincipal)
+		userExtraInfo := providers.GetUserExtraAttributes(input.GetType(), userPrincipal)
 		err = h.ensureUserAttribute(user.Name, userPrincipal.Provider, groupPrincipals, userExtraInfo, loginTime)
 		if err != nil {
 			logrus.Warnf("login: Error creating or updating userAttribute for %s, retrying: %s", userPrincipal.Name, err)

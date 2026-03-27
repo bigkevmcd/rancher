@@ -1161,7 +1161,7 @@ func TestGetGroupsFromClaimInfo(t *testing.T) {
 			o := &OpenIDCProvider{
 				Name: "oidc",
 			}
-			got := o.getGroupsFromClaimInfo(tt.args.claimInfo)
+			got := o.getGroupsFromClaimInfo(tt.args.claimInfo, "oidc")
 			var gotGroupNames []string
 			for _, principal := range got {
 				parts := strings.Split(principal.Name, "://")
@@ -1207,7 +1207,7 @@ func TestLogout(t *testing.T) {
 			testToken := &apiv3.Token{UserID: userId, AuthProvider: providerName}
 			o := OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*apiv3.OIDCConfig, error) { return tt.config, nil },
+				GetConfig: func(_ string) (*apiv3.OIDCConfig, error) { return tt.config, nil },
 			}
 			b, err := json.Marshal(&apiv3.AuthConfigLogoutInput{
 				FinalRedirectURL: "https://example.com/logged-out",
@@ -1236,7 +1236,7 @@ func TestLogoutAllWhenNotEnabled(t *testing.T) {
 	testToken := &apiv3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func(_ string) (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
 	}
 	b, err := json.Marshal(&apiv3.AuthConfigLogoutInput{
 		FinalRedirectURL: "https://example.com/logged-out",
@@ -1261,7 +1261,7 @@ func TestLogoutAll(t *testing.T) {
 	testToken := &apiv3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func(_ string) (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
 	}
 	b, err := json.Marshal(&apiv3.AuthConfigLogoutInput{
 		FinalRedirectURL: "https://example.com/logged-out",
@@ -1294,7 +1294,7 @@ func TestLogoutAllNoEndSessionEndpoint(t *testing.T) {
 	testToken := &apiv3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func(_ string) (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
 	}
 	b, err := json.Marshal(&apiv3.AuthConfigLogoutInput{
 		FinalRedirectURL: "https://example.com/logged-out",
@@ -1319,7 +1319,7 @@ func TestLogoutWithIDToken(t *testing.T) {
 	testToken := &apiv3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func(_ string) (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
 	}
 
 	b, err := json.Marshal(&apiv3.AuthConfigLogoutInput{
@@ -1353,7 +1353,7 @@ func TestLogoutAllNoIDToken(t *testing.T) {
 	testToken := &apiv3.Token{UserID: userId, AuthProvider: providerName}
 	o := OpenIDCProvider{
 		Name:      providerName,
-		GetConfig: func() (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
+		GetConfig: func(_ string) (*apiv3.OIDCConfig, error) { return oidcConfig, nil },
 	}
 
 	b, err := json.Marshal(&apiv3.AuthConfigLogoutInput{

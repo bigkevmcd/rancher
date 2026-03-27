@@ -96,7 +96,7 @@ func Configure(ctx context.Context, mgmt *config.ScaledContext) {
 	tokenMGR := tokens.NewManager(mgmt.Wrangler)
 
 	providers[local.Name] = local.Configure(ctx, mgmt, userMGR)
-	providers[github.Name] = github.Configure(mgmt, userMGR, tokenMGR)
+	providers[github.ProviderName] = github.Configure(mgmt, userMGR, tokenMGR)
 	providers[githubapp.Name] = githubapp.Configure(ctx, mgmt, userMGR, tokenMGR)
 	providers[azure.Name] = azure.Configure(mgmt, userMGR, tokenMGR)
 	providers[activedirectory.Name] = activedirectory.Configure(mgmt, userMGR, tokenMGR)
@@ -109,7 +109,7 @@ func Configure(ctx context.Context, mgmt *config.ScaledContext) {
 	providers[saml.ShibbolethName] = saml.Configure(mgmt, userMGR, tokenMGR, saml.ShibbolethName)
 	providers[googleoauth.Name] = googleoauth.Configure(mgmt, userMGR, tokenMGR)
 	providers[oidc.Name] = oidc.Configure(ctx, mgmt, userMGR, tokenMGR)
-	providers[keycloakoidc.Name] = keycloakoidc.Configure(ctx, mgmt, userMGR, tokenMGR)
+	providers[keycloakoidc.ProviderName] = keycloakoidc.Configure(ctx, mgmt, userMGR, tokenMGR)
 	providers[genericoidc.Name] = genericoidc.Configure(ctx, mgmt, userMGR, tokenMGR)
 	providers[cognito.Name] = cognito.Configure(ctx, mgmt, userMGR, tokenMGR)
 }
@@ -154,9 +154,9 @@ func IsValidUserExtraAttribute(key string) bool {
 }
 
 // AuthenticateUser delegates authentication to the named provider and returns the resulting principals.
-func AuthenticateUser(w http.ResponseWriter, req *http.Request, input any, providerName string) (apiv3.Principal, []apiv3.Principal, string, error) {
+func AuthenticateUser(w http.ResponseWriter, req *http.Request, input any, providerType string) (apiv3.Principal, []apiv3.Principal, string, error) {
 	mu.RLock()
-	p := providers[providerName]
+	p := providers[nameFromType(providerType)]
 	mu.RUnlock()
 
 	return p.AuthenticateUser(w, req, input)
@@ -230,23 +230,27 @@ func RefetchGroupPrincipals(principalID string, providerName string, secret stri
 }
 
 // GetUserExtraAttributes returns extra attributes for the user principal from the named provider.
-func GetUserExtraAttributes(providerName string, userPrincipal apiv3.Principal) map[string][]string {
+func GetUserExtraAttributes(providerType string, userPrincipal apiv3.Principal) map[string][]string {
 	mu.RLock()
-	p := providers[providerName]
+	p := providers[nameFromType(providerType)]
 	mu.RUnlock()
 
 	return p.GetUserExtraAttributes(userPrincipal)
 }
 
 // IsDisabledProvider reports whether the named provider is currently disabled.
+// TODO: This needs to be fixed.
 func IsDisabledProvider(providerName string) (bool, error) {
-	provider, err := GetProvider(providerName)
-	if err != nil {
-		return false, err
-	}
-
-	return provider.IsDisabledProvider()
+	return false, nil
 }
+
+// provider, err := GetProvider(providerName)
+// if err != nil {
+// 	return false, err
+// }
+
+// return provider.IsDisabledProvider(providerName)
+// }
 
 // ProviderNames returns the names of all registered providers.
 func ProviderNames() []string {
@@ -283,7 +287,8 @@ func IsExternalProviderEnabled() bool {
 		p := providers[hint]
 		mu.RUnlock()
 		if p != nil {
-			disabled, err := p.IsDisabledProvider()
+			// TODO: This will need to iterate over names
+			disabled, err := p.IsDisabledProvider(p.GetName())
 			if err == nil {
 				if !disabled {
 					return true // Hint still valid.
@@ -313,7 +318,7 @@ func IsExternalProviderEnabled() bool {
 	mu.RUnlock()
 
 	for _, e := range snapshot {
-		disabled, err := e.provider.IsDisabledProvider()
+		disabled, err := e.provider.IsDisabledProvider(e.provider.GetName())
 		if err != nil {
 			logrus.Warnf("checking if provider %s is disabled: %v", e.name, err)
 			continue

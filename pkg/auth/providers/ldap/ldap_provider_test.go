@@ -185,7 +185,7 @@ func TestLdapProviderGetLDAPConfig(t *testing.T) {
 				userScope:             tt.fields.userScope,
 				groupScope:            tt.fields.groupScope,
 			}
-			gotStoredLdapConfig, gotCaPool, err := p.getLDAPConfig(m)
+			gotStoredLdapConfig, gotCaPool, err := p.getLDAPConfig(m, tt.fields.providerName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ldapProvider.getLDAPConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return

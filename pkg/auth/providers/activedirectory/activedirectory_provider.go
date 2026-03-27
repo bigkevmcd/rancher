@@ -259,7 +259,7 @@ func (e LoginDisabledError) Error() string {
 }
 
 // IsDisabledProvider checks if the Azure Active Directory provider is currently disabled in Rancher.
-func (p *adProvider) IsDisabledProvider() (bool, error) {
+func (p *adProvider) IsDisabledProvider(_ string) (bool, error) {
 	adConfig, _, err := p.getActiveDirectoryConfig()
 	if err != nil {
 		return false, err

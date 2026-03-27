@@ -768,6 +768,7 @@ type OIDCTestOutput struct {
 }
 
 type OIDCApplyInput struct {
+	ConfigName string     `json:"configName"`
 	OIDCConfig OIDCConfig `json:"oidcConfig,omitempty"`
 	Code       string     `json:"code,omitempty"`
 	Enabled    bool       `json:"enabled,omitempty"`

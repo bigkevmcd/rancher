@@ -173,7 +173,7 @@ func (p *ldapProvider) testAndApply(request *types.APIContext) error {
 }
 
 func (p *ldapProvider) saveLDAPConfig(config *v3.LdapConfig) error {
-	storedConfig, _, err := p.getLDAPConfig(p.authConfigs.ObjectClient().UnstructuredClient())
+	storedConfig, _, err := p.getLDAPConfig(p.authConfigs.ObjectClient().UnstructuredClient(), config.Name)
 	if err != nil {
 		return err
 	}

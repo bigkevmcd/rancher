@@ -25,7 +25,7 @@ import (
 )
 
 func AuthConfigs(management *config.ManagementContext) error {
-	if err := addAuthConfig(github.Name, client.GithubConfigType, false, management); err != nil {
+	if err := addAuthConfig(github.ProviderName, client.GithubConfigType, false, management); err != nil {
 		return err
 	}
 
@@ -77,7 +77,7 @@ func AuthConfigs(management *config.ManagementContext) error {
 		return err
 	}
 
-	if err := addAuthConfigWithSLO(keycloakoidc.Name, client.KeyCloakOIDCConfigType, false, management); err != nil {
+	if err := addAuthConfigWithSLO(keycloakoidc.ProviderName, client.KeyCloakOIDCConfigType, false, management); err != nil {
 		return err
 	}
 
