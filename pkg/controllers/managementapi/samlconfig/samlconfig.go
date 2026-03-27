@@ -38,11 +38,6 @@ func (a *authProvider) sync(key string, config *v3.AuthConfig) (runtime.Object, 
 		return nil, nil
 	}
 
-	if config.Name != saml.PingName && config.Name != saml.ADFSName && config.Name != saml.KeyCloakName &&
-		config.Name != saml.OKTAName && config.Name != saml.ShibbolethName && config.Name != saml.GenericSAMLName {
-		return nil, nil
-	}
-
 	if !config.Enabled {
 		return nil, nil
 	}
