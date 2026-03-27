@@ -711,7 +711,7 @@ func (o *OpenIDCProvider) UpdateToken(refreshedToken *oauth2.Token, userID strin
 }
 
 // IsDisabledProvider checks if the OIDC auth provider is currently disabled in Rancher.
-func (o *OpenIDCProvider) IsDisabledProvider() (bool, error) {
+func (o *OpenIDCProvider) IsDisabledProvider(_ string) (bool, error) {
 	oidcConfig, err := o.GetConfig()
 	if err != nil {
 		return false, err

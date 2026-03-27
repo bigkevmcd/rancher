@@ -261,7 +261,7 @@ func (g *googleOauthProvider) TransformToAuthProvider(authConfig map[string]any)
 	return p, nil
 }
 
-func (g *googleOauthProvider) RefetchGroupPrincipals(principalID string, secret string) ([]apiv3.Principal, error) {
+func (g *googleOauthProvider) RefetchGroupPrincipals(principalID, secret string) ([]apiv3.Principal, error) {
 	var principals []apiv3.Principal
 	config, err := g.getGoogleOAuthConfigCR()
 	if err != nil {
@@ -429,7 +429,7 @@ func (g *googleOauthProvider) GetUserExtraAttributes(userPrincipal apiv3.Princip
 }
 
 // IsDisabledProvider checks if the Google auth provider is currently disabled in Rancher.
-func (g *googleOauthProvider) IsDisabledProvider() (bool, error) {
+func (g *googleOauthProvider) IsDisabledProvider(_ string) (bool, error) {
 	googleOauthConfig, err := g.getGoogleOAuthConfigCR()
 	if err != nil {
 		return false, err

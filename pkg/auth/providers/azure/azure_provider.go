@@ -452,7 +452,7 @@ func (ap *Provider) GetUserExtraAttributes(userPrincipal apiv3.Principal) map[st
 }
 
 // IsDisabledProvider checks if the Azure AD auth provider is currently disabled in Rancher.
-func (ap *Provider) IsDisabledProvider() (bool, error) {
+func (ap *Provider) IsDisabledProvider(_ string) (bool, error) {
 	azureConfig, err := ap.GetAzureConfigK8s()
 	if err != nil {
 		return false, err

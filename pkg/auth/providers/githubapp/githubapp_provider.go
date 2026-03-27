@@ -343,7 +343,7 @@ func (g *Provider) GetUserExtraAttributes(userPrincipal apiv3.Principal) map[str
 }
 
 // IsDisabledProvider checks if the GitHub auth provider is currently disabled in Rancher.
-func (g *Provider) IsDisabledProvider() (bool, error) {
+func (g *Provider) IsDisabledProvider(_ string) (bool, error) {
 	ghConfig, err := g.getConfig()
 	if err != nil {
 		return false, err

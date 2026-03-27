@@ -79,9 +79,10 @@ func Configure(ctx context.Context, mgmt *config.ScaledContext) {
 	Providers[local.Name] = p
 
 	p = github.Configure(mgmt, userMGR, tokenMGR)
-	ProviderNames[github.Name] = true
-	providersWithSecrets[github.Name] = true
-	Providers[github.Name] = p
+	// TODO: What to do here?
+	ProviderNames[github.DefaultName] = true
+	providersWithSecrets[github.DefaultName] = true
+	Providers[github.DefaultName] = p
 
 	p = githubapp.Configure(ctx, mgmt, userMGR, tokenMGR)
 	ProviderNames[githubapp.Name] = true
@@ -237,7 +238,7 @@ func CanAccessWithGroupProviders(providerName string, userPrincipalID string, gr
 	return Providers[providerName].CanAccessWithGroupProviders(userPrincipalID, groups)
 }
 
-func RefetchGroupPrincipals(principalID string, providerName string, secret string) ([]apiv3.Principal, error) {
+func RefetchGroupPrincipals(principalID, providerName, secret string) ([]apiv3.Principal, error) {
 	return Providers[providerName].RefetchGroupPrincipals(principalID, secret)
 }
 
@@ -250,7 +251,7 @@ func IsDisabledProvider(providerName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return provider.IsDisabledProvider()
+	return provider.IsDisabledProvider(providerName)
 }
 
 // ProviderHasPerUserSecrets returns true if a given provider is known to use per-user auth tokens stored in secrets.

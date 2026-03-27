@@ -80,13 +80,14 @@ func TestNewAzureADProviderDoesNotHavePerUserTokens(t *testing.T) {
 
 func TestProviderHasPerUserTokens(t *testing.T) {
 	t.Cleanup(cleanup)
-	hasPerUserSecrets, err := ProviderHasPerUserSecrets(github.Name)
+	// TODO: Check to see how this is called.
+	hasPerUserSecrets, err := ProviderHasPerUserSecrets(github.DefaultName)
 
 	require.NoError(t, err)
 	assert.False(t, hasPerUserSecrets)
 
-	providersWithSecrets[github.Name] = true
-	hasPerUserSecrets, err = ProviderHasPerUserSecrets(github.Name)
+	providersWithSecrets[github.DefaultName] = true
+	hasPerUserSecrets, err = ProviderHasPerUserSecrets(github.DefaultName)
 
 	require.NoError(t, err)
 	assert.True(t, hasPerUserSecrets)
