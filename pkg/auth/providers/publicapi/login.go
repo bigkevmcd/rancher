@@ -87,7 +87,6 @@ func (h *v1LoginHandler) login(w http.ResponseWriter, r *http.Request) {
 		util.ReturnAPIError(w, apierror.NewAPIError(validation.InvalidBodyContent, ""))
 		return
 	}
-
 	input := providerInputForType(generic.Type)
 	err = json.Unmarshal(bytes, input)
 	if err != nil {
@@ -159,7 +158,8 @@ func providerInputForType(providerType string) loginAccessor {
 		}
 	case client.GithubProviderType:
 		return &apiv3.GithubLogin{
-			GenericLogin: apiv3.GenericLogin{Type: providerType, Name: github.Name},
+			// TODO: This needs fixed
+			GenericLogin: apiv3.GenericLogin{Type: providerType, Name: github.DefaultName},
 		}
 	case client.GithubAppProviderType:
 		return &apiv3.GithubLogin{

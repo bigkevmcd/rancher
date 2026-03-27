@@ -245,7 +245,7 @@ func IsDisabledProvider(providerName string) (bool, error) {
 		return false, err
 	}
 
-	return provider.IsDisabledProvider()
+	return provider.IsDisabledProvider(providerName)
 }
 
 // ProviderNames returns the names of all registered providers.
