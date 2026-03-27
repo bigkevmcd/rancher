@@ -365,7 +365,7 @@ func (s *Provider) toPrincipal(principalType string, princ apiv3.Principal, toke
 	return princ
 }
 
-func (s *Provider) RefetchGroupPrincipals(principalID string, secret string) ([]apiv3.Principal, error) {
+func (s *Provider) RefetchGroupPrincipals(principalID, secret string) ([]apiv3.Principal, error) {
 	return nil, errors.New("Not implemented")
 }
 
@@ -542,7 +542,7 @@ func (s *Provider) GetUserExtraAttributes(userPrincipal apiv3.Principal) map[str
 }
 
 // IsDisabledProvider checks if the SAML auth provider is currently disabled in Rancher.
-func (s *Provider) IsDisabledProvider() (bool, error) {
+func (s *Provider) IsDisabledProvider(_ string) (bool, error) {
 	samlConfig, err := s.getSamlConfig()
 	if err != nil {
 		return false, err

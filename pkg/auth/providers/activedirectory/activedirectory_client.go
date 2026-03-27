@@ -97,7 +97,7 @@ func (p *adProvider) loginUser(lConn ldapv3.Client, credentials *v3.BasicLogin, 
 	return userPrincipal, groupPrincipals, err
 }
 
-func (p *adProvider) RefetchGroupPrincipals(principalID string, secret string) ([]v3.Principal, error) {
+func (p *adProvider) RefetchGroupPrincipals(principalID, secret string) ([]v3.Principal, error) {
 	config, caPool, err := p.getActiveDirectoryConfig()
 	if err != nil {
 		return nil, err

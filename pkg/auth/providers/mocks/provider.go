@@ -87,20 +87,6 @@ func (mr *MockAuthProviderMockRecorder) CustomizeSchema(schema any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CustomizeSchema", reflect.TypeOf((*MockAuthProvider)(nil).CustomizeSchema), schema)
 }
 
-// GetName mocks base method.
-func (m *MockAuthProvider) GetName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetName indicates an expected call of GetName.
-func (mr *MockAuthProviderMockRecorder) GetName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockAuthProvider)(nil).GetName))
-}
-
 // GetPrincipal mocks base method.
 func (m *MockAuthProvider) GetPrincipal(principalID string, token accessor.TokenAccessor) (v3.Principal, error) {
 	m.ctrl.T.Helper()
@@ -131,18 +117,18 @@ func (mr *MockAuthProviderMockRecorder) GetUserExtraAttributes(userPrincipal any
 }
 
 // IsDisabledProvider mocks base method.
-func (m *MockAuthProvider) IsDisabledProvider() (bool, error) {
+func (m *MockAuthProvider) IsDisabledProvider(arg0 string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsDisabledProvider")
+	ret := m.ctrl.Call(m, "IsDisabledProvider", arg0)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IsDisabledProvider indicates an expected call of IsDisabledProvider.
-func (mr *MockAuthProviderMockRecorder) IsDisabledProvider() *gomock.Call {
+func (mr *MockAuthProviderMockRecorder) IsDisabledProvider(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDisabledProvider", reflect.TypeOf((*MockAuthProvider)(nil).IsDisabledProvider))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDisabledProvider", reflect.TypeOf((*MockAuthProvider)(nil).IsDisabledProvider), arg0)
 }
 
 // Logout mocks base method.
