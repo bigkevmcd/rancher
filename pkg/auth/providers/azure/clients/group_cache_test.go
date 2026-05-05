@@ -17,7 +17,7 @@ func TestUserGroupsToPrincipals(t *testing.T) {
 
 	fc := &fakePrincipalsClient{
 		groups: map[string]fakeGroup{
-			testGUID: fakeGroup{id: ptr.To(testGUID)},
+			testGUID: {id: ptr.To(testGUID)},
 		},
 	}
 	principals, err := UserGroupsToPrincipals(fc, []string{testGUID})

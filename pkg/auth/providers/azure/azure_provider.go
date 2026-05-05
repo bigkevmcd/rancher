@@ -379,25 +379,27 @@ func (ap *Provider) getGroupPrincipal(client clients.AzureClient, id string, tok
 }
 
 func (ap *Provider) searchUserPrincipalsByName(client clients.AzureClient, name string, token accessor.TokenAccessor) ([]apiv3.Principal, error) {
-	filter := fmt.Sprintf("startswith(userPrincipalName,'%[1]s') or startswith(displayName,'%[1]s') or startswith(givenName,'%[1]s') or startswith(surname,'%[1]s')", name)
+	escaped := strings.ReplaceAll(name, "'", "''")
+	filter := fmt.Sprintf("startswith(userPrincipalName,'%[1]s') or startswith(displayName,'%[1]s') or startswith(givenName,'%[1]s') or startswith(surname,'%[1]s')", escaped)
 	principals, err := client.ListUsers(filter)
 	if err != nil {
 		return nil, err
 	}
-	for _, principal := range principals {
-		principal.Me = common.SamePrincipal(token.GetUserPrincipal(), principal)
+	for i := range principals {
+		principals[i].Me = common.SamePrincipal(token.GetUserPrincipal(), principals[i])
 	}
 	return principals, nil
 }
 
 func (ap *Provider) searchGroupPrincipalsByName(client clients.AzureClient, name string, token accessor.TokenAccessor) ([]apiv3.Principal, error) {
-	filter := fmt.Sprintf("startswith(displayName,'%[1]s') or startswith(mail,'%[1]s') or startswith(mailNickname,'%[1]s')", name)
+	escaped := strings.ReplaceAll(name, "'", "''")
+	filter := fmt.Sprintf("startswith(displayName,'%[1]s') or startswith(mail,'%[1]s') or startswith(mailNickname,'%[1]s')", escaped)
 	principals, err := client.ListGroups(filter)
 	if err != nil {
 		return nil, err
 	}
-	for _, principal := range principals {
-		principal.MemberOf = ap.userMGR.IsMemberOf(token, principal)
+	for i := range principals {
+		principals[i].MemberOf = ap.userMGR.IsMemberOf(token, principals[i])
 	}
 	return principals, nil
 }

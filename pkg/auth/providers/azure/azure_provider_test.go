@@ -6,14 +6,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/rancher/norman/api/writer"
 	"github.com/rancher/norman/types"
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/auth/accessor"
 	managementschema "github.com/rancher/rancher/pkg/schemas/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/user"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apitypes "k8s.io/apimachinery/pkg/types"
 )
 
 // TestConfigureTest inspects the Redirect URL during Azure AD setup.
@@ -678,3 +682,210 @@ func TestSetIDTokenCookie(t *testing.T) {
 	assert.Equal(t, "my.id.token", found.Value)
 	assert.True(t, found.HttpOnly)
 }
+
+func TestSearchUserPrincipalsByNameODataInjection(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		searchName     string
+		expectedFilter string
+	}{
+		{
+			name:           "benign name passes through unchanged",
+			searchName:     "john",
+			expectedFilter: "startswith(userPrincipalName,'john') or startswith(displayName,'john') or startswith(givenName,'john') or startswith(surname,'john')",
+		},
+		{
+			name:           "single quote in name is escaped to prevent OData injection",
+			searchName:     "o'malley",
+			expectedFilter: "startswith(userPrincipalName,'o''malley') or startswith(displayName,'o''malley') or startswith(givenName,'o''malley') or startswith(surname,'o''malley')",
+		},
+		{
+			name:           "multiple single quotes are all escaped",
+			searchName:     "it's O'Malley's",
+			expectedFilter: "startswith(userPrincipalName,'it''s O''Malley''s') or startswith(displayName,'it''s O''Malley''s') or startswith(givenName,'it''s O''Malley''s') or startswith(surname,'it''s O''Malley''s')",
+		},
+		{
+			name:           "injection attempt breaking out of startswith clause is neutralised",
+			searchName:     "') or 1 eq 1 or startswith(x,'",
+			expectedFilter: "startswith(userPrincipalName,''') or 1 eq 1 or startswith(x,''') or startswith(displayName,''') or 1 eq 1 or startswith(x,''') or startswith(givenName,''') or 1 eq 1 or startswith(x,''') or startswith(surname,''') or 1 eq 1 or startswith(x,''')",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fc := &fakeAzureClient{}
+			p := &Provider{}
+			_, err := p.searchUserPrincipalsByName(fc, tt.searchName, &v3.Token{})
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedFilter, fc.capturedUserFilter)
+		})
+	}
+}
+
+func TestSearchGroupPrincipalsByNameODataInjection(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		searchName     string
+		expectedFilter string
+	}{
+		{
+			name:           "benign name passes through unchanged",
+			searchName:     "engineering",
+			expectedFilter: "startswith(displayName,'engineering') or startswith(mail,'engineering') or startswith(mailNickname,'engineering')",
+		},
+		{
+			name:           "single quote in name is escaped to prevent OData injection",
+			searchName:     "dev's team",
+			expectedFilter: "startswith(displayName,'dev''s team') or startswith(mail,'dev''s team') or startswith(mailNickname,'dev''s team')",
+		},
+		{
+			name:           "injection attempt breaking out of startswith clause is neutralised",
+			searchName:     "') or 1 eq 1 or startswith(x,'",
+			expectedFilter: "startswith(displayName,''') or 1 eq 1 or startswith(x,''') or startswith(mail,''') or 1 eq 1 or startswith(x,''') or startswith(mailNickname,''') or 1 eq 1 or startswith(x,''')",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fc := &fakeAzureClient{}
+			p := &Provider{}
+			_, err := p.searchGroupPrincipalsByName(fc, tt.searchName, &v3.Token{})
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedFilter, fc.capturedGroupFilter)
+		})
+	}
+}
+
+func TestSearchUserPrincipalsByNameMeFlag(t *testing.T) {
+	t.Parallel()
+
+	myPrincipal := v3.Principal{
+		ObjectMeta:    metav1.ObjectMeta{Name: "azuread_user://abc123"},
+		LoginName:     "me@example.com",
+		PrincipalType: "user",
+	}
+	otherPrincipal := v3.Principal{
+		ObjectMeta:    metav1.ObjectMeta{Name: "azuread_user://xyz789"},
+		LoginName:     "other@example.com",
+		PrincipalType: "user",
+	}
+
+	token := &v3.Token{}
+	token.UserPrincipal = myPrincipal
+
+	fc := &fakeAzureClient{usersToReturn: []v3.Principal{myPrincipal, otherPrincipal}}
+	p := &Provider{}
+
+	results, err := p.searchUserPrincipalsByName(fc, "me", token)
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+
+	assert.True(t, results[0].Me, "first result should have Me=true because it matches the token's user principal")
+	assert.False(t, results[1].Me, "second result should have Me=false because it does not match the token's user principal")
+}
+
+func TestSearchGroupPrincipalsByNameMemberOfFlag(t *testing.T) {
+	t.Parallel()
+
+	memberGroup := v3.Principal{
+		ObjectMeta:    metav1.ObjectMeta{Name: "azuread_group://group-a"},
+		PrincipalType: "group",
+	}
+	nonMemberGroup := v3.Principal{
+		ObjectMeta:    metav1.ObjectMeta{Name: "azuread_group://group-b"},
+		PrincipalType: "group",
+	}
+
+	fc := &fakeAzureClient{groupsToReturn: []v3.Principal{memberGroup, nonMemberGroup}}
+	p := &Provider{
+		userMGR: &fakeUserManager{
+			isMemberOfFn: func(_ accessor.TokenAccessor, group v3.Principal) bool {
+				return group.Name == memberGroup.Name
+			},
+		},
+	}
+
+	token := &v3.Token{}
+	results, err := p.searchGroupPrincipalsByName(fc, "group", token)
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+
+	assert.True(t, results[0].MemberOf, "first result should have MemberOf=true because the user is a member")
+	assert.False(t, results[1].MemberOf, "second result should have MemberOf=false because the user is not a member")
+}
+
+// fakeAzureClient implements clients.AzureClient. It records the OData filter
+// strings passed to ListUsers and ListGroups and can be pre-loaded with
+// principals to return from those calls.
+type fakeAzureClient struct {
+	capturedUserFilter  string
+	capturedGroupFilter string
+	usersToReturn       []v3.Principal
+	groupsToReturn      []v3.Principal
+}
+
+func (f *fakeAzureClient) LoginUser(*v3.AzureADConfig, *v3.AzureADLogin) (v3.Principal, []v3.Principal, string, string, error) {
+	return v3.Principal{}, nil, "", "", nil
+}
+
+func (f *fakeAzureClient) AccessToken() string { return "" }
+
+func (f *fakeAzureClient) MarshalTokenJSON() (string, error) { return "", nil }
+
+func (f *fakeAzureClient) GetUser(string) (v3.Principal, error) { return v3.Principal{}, nil }
+
+func (f *fakeAzureClient) ListUsers(filter string) ([]v3.Principal, error) {
+	f.capturedUserFilter = filter
+	return f.usersToReturn, nil
+}
+
+func (f *fakeAzureClient) GetGroup(string) (v3.Principal, error) { return v3.Principal{}, nil }
+
+func (f *fakeAzureClient) ListGroups(filter string) ([]v3.Principal, error) {
+	f.capturedGroupFilter = filter
+	return f.groupsToReturn, nil
+}
+
+func (f *fakeAzureClient) ListGroupMemberships(string, string) ([]string, error) { return nil, nil }
+
+// fakeUserManager is a stub implementation of user.Manager.
+// Only IsMemberOf has meaningful behaviour; all other methods panic.
+type fakeUserManager struct {
+	isMemberOfFn func(token accessor.TokenAccessor, group v3.Principal) bool
+}
+
+func (f *fakeUserManager) IsMemberOf(token accessor.TokenAccessor, group v3.Principal) bool {
+	return f.isMemberOfFn(token, group)
+}
+
+func (f *fakeUserManager) GetUser(*http.Request) string                { panic("not implemented") }
+func (f *fakeUserManager) EnsureUser(string, string) (*v3.User, error) { panic("not implemented") }
+func (f *fakeUserManager) CheckAccess(string, []string, string, []v3.Principal) (bool, error) {
+	panic("not implemented")
+}
+func (f *fakeUserManager) SetPrincipalOnCurrentUserByUserID(string, v3.Principal) (*v3.User, error) {
+	panic("not implemented")
+}
+func (f *fakeUserManager) SetPrincipalOnCurrentUser(*http.Request, v3.Principal) (*v3.User, error) {
+	panic("not implemented")
+}
+func (f *fakeUserManager) CreateNewUserClusterRoleBinding(string, apitypes.UID) error {
+	panic("not implemented")
+}
+func (f *fakeUserManager) GetUserByPrincipalID(string) (*v3.User, error) { panic("not implemented") }
+func (f *fakeUserManager) GetGroupsForTokenAuthProvider(accessor.TokenAccessor) []v3.Principal {
+	panic("not implemented")
+}
+func (f *fakeUserManager) EnsureAndGetUserAttribute(string) (*v3.UserAttribute, bool, error) {
+	panic("not implemented")
+}
+func (f *fakeUserManager) UserAttributeCreateOrUpdate(string, string, []v3.Principal, map[string][]string, ...time.Time) error {
+	panic("not implemented")
+}
+
+// Compile-time assertion that fakeUserManager satisfies user.Manager.
+var _ user.Manager = (*fakeUserManager)(nil)

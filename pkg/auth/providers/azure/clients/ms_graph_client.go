@@ -427,7 +427,10 @@ func oidFromAuthCode(token string, config *v3.AzureADConfig) (oid string, rawIDT
 	if err != nil {
 		return "", "", err
 	}
-	scope := fmt.Sprintf("%s/%s", config.GraphEndpoint, ".default")
+	scope, err := url.JoinPath(config.GraphEndpoint, ".default")
+	if err != nil {
+		return "", "", fmt.Errorf("making graph endpoint for %s: %w", config.GraphEndpoint, err)
+	}
 
 	authResult, err := confidentialClientApp.AcquireTokenByAuthCode(context.Background(), token, config.RancherURL, []string{scope, "openid"})
 	if err != nil {
