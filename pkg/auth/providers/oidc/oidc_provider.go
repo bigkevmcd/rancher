@@ -61,7 +61,7 @@ type OpenIDCProvider struct {
 	Secrets     wcorev1.SecretController
 	UserMGR     user.Manager
 	TokenMgr    tokenManager
-	GetConfig   func() (*apiv3.OIDCConfig, error)
+	GetConfig   func(string) (*apiv3.OIDCConfig, error)
 }
 
 type ClaimInfo struct {
@@ -117,7 +117,7 @@ func (o *OpenIDCProvider) LoginUser(w http.ResponseWriter, req *http.Request, oa
 	var err error
 
 	if config == nil {
-		config, err = o.GetConfig()
+		config, err = o.GetConfig(config.GetName())
 		if err != nil {
 			return userPrincipal, nil, "", userClaimInfo, err
 		}
@@ -275,9 +275,13 @@ func (o *OpenIDCProvider) getRedirectURL(authConfig map[string]any) (string, err
 }
 
 func (o *OpenIDCProvider) RefetchGroupPrincipals(principalID string, secret string) ([]apiv3.Principal, error) {
-	var groupPrincipals []apiv3.Principal
+	provider, _, _, err := common.SplitPrincipalID(principalID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid principal: %s", principalID)
+	}
 
-	config, err := o.GetConfig()
+	var groupPrincipals []apiv3.Principal
+	config, err := o.GetConfig(provider)
 	if err != nil {
 		logrus.Errorf("OpenIDCProvider: refetchGroupPrincipals: error fetching OIDCConfig: %v", err)
 		return groupPrincipals, err
@@ -308,7 +312,12 @@ func (o *OpenIDCProvider) UsesUserSecrets() bool      { return true }
 func (o *OpenIDCProvider) CanRefreshPrincipals() bool { return true }
 
 func (o *OpenIDCProvider) CanAccessWithGroupProviders(userPrincipalID string, groupPrincipals []v3.Principal) (bool, error) {
-	config, err := o.GetConfig()
+	provider, _, _, err := common.SplitPrincipalID(userPrincipalID)
+	if err != nil {
+		return false, fmt.Errorf("invalid principal: %s", userPrincipalID)
+	}
+
+	config, err := o.GetConfig(provider)
 	if err != nil {
 		logrus.Errorf("OpenIDCProvider: canAccessWithGroupProviders: error fetching OIDCConfig: %v", err)
 		return false, err
@@ -368,7 +377,7 @@ func (o *OpenIDCProvider) toPrincipalFromToken(principalType string, princ apiv3
 }
 
 func (o *OpenIDCProvider) saveOIDCConfig(config *apiv3.OIDCConfig) error {
-	storedOidcConfig, err := o.GetConfig()
+	storedOidcConfig, err := o.GetConfig(config.GetName())
 	if err != nil {
 		return err
 	}
@@ -398,8 +407,8 @@ func (o *OpenIDCProvider) saveOIDCConfig(config *apiv3.OIDCConfig) error {
 	return err
 }
 
-func (o *OpenIDCProvider) GetOIDCConfig() (*apiv3.OIDCConfig, error) {
-	authConfigObj, err := o.AuthConfigs.ObjectClient().UnstructuredClient().Get(o.Name, metav1.GetOptions{})
+func (o *OpenIDCProvider) GetOIDCConfig(name string) (*apiv3.OIDCConfig, error) {
+	authConfigObj, err := o.AuthConfigs.ObjectClient().UnstructuredClient().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve OIDCConfig, error: %v", err)
 	}
@@ -757,13 +766,14 @@ func (o *OpenIDCProvider) UpdateToken(refreshedToken *oauth2.Token, userID strin
 		return err
 	}
 	logrus.Debugf("OpenIDCProvider: UpdateToken: saving refreshed access token")
+	// TODO: Fix
 	o.TokenMgr.UpdateSecret(userID, o.Name, string(marshalledToken))
 	return err
 }
 
 // IsDisabledProvider checks if the OIDC auth provider is currently disabled in Rancher.
-func (o *OpenIDCProvider) IsDisabledProvider(_ string) (bool, error) {
-	oidcConfig, err := o.GetConfig()
+func (o *OpenIDCProvider) IsDisabledProvider(name string) (bool, error) {
+	oidcConfig, err := o.GetConfig(name)
 	if err != nil {
 		return false, err
 	}
@@ -808,7 +818,7 @@ func (o *OpenIDCProvider) getOIDCProvider(ctx context.Context, oidcConfig *apiv3
 func (o *OpenIDCProvider) Logout(w http.ResponseWriter, r *http.Request, token accessor.TokenAccessor) error {
 	providerName := token.GetAuthProvider()
 	logrus.Debugf("OpenIDCProvider [logout]: triggered by provider %s", providerName)
-	oidcConfig, err := o.GetConfig()
+	oidcConfig, err := o.GetConfig(token.GetUserPrincipal().Provider)
 	if err != nil {
 		return fmt.Errorf("getting config for OIDC Logout: %w", err)
 	}
@@ -822,7 +832,8 @@ func (o *OpenIDCProvider) Logout(w http.ResponseWriter, r *http.Request, token a
 func (o *OpenIDCProvider) LogoutAll(w http.ResponseWriter, r *http.Request, token accessor.TokenAccessor) error {
 	logrus.Debugf("OpenIDCProvider [logout-all]: triggered by provider %s", token.GetAuthProvider())
 
-	oidcConfig, err := o.GetConfig()
+	// TODO: Check that this is correct?
+	oidcConfig, err := o.GetConfig(token.GetUserPrincipal().Provider)
 	if err != nil {
 		return err
 	}
