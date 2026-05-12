@@ -241,7 +241,7 @@ func (g *Provider) LoginUser(host string, githubCredential *apiv3.GithubLogin, c
 }
 
 func (g *Provider) RefetchGroupPrincipals(principalID, secret string) ([]apiv3.Principal, error) {
-	provider, _, _, err := splitPrincipalID(principalID)
+	provider, _, _, err := common.SplitPrincipalID(principalID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid principal: %s", principalID)
 	}
@@ -345,7 +345,7 @@ func (g *Provider) GetPrincipal(principalID string, token accessor.TokenAccessor
 		accessToken = token.GetProviderInfo()["access_token"]
 	}
 	// parsing id to get the provider, external id and type. id looks like github_[user|org|team]://12345
-	_, principalType, externalID, err := splitPrincipalID(principalID)
+	_, principalType, externalID, err := common.SplitPrincipalID(principalID)
 	if err != nil {
 		return apiv3.Principal{}, err
 	}
@@ -401,7 +401,7 @@ func (g *Provider) toPrincipal(principalType string, acct common.GitHubAccount, 
 }
 
 func (g *Provider) CanAccessWithGroupProviders(userPrincipalID string, groupPrincipals []apiv3.Principal) (bool, error) {
-	provider, _, _, err := splitPrincipalID(userPrincipalID)
+	provider, _, _, err := common.SplitPrincipalID(userPrincipalID)
 	if err != nil {
 		return false, fmt.Errorf("invalid principal: %s", userPrincipalID)
 	}
@@ -425,22 +425,4 @@ func (g *Provider) IsDisabledProvider(name string) (bool, error) {
 		return false, err
 	}
 	return !ghConfig.Enabled, nil
-}
-
-// parsing id to get the provider, external id and type. id looks like github_[user|org|team]://12345
-//
-// returns provider, principalType, externalID, error
-func splitPrincipalID(principalID string) (string, string, string, error) {
-	parts := strings.SplitN(principalID, ":", 2)
-	if len(parts) != 2 {
-		return "", "", "", errors.Errorf("invalid principal id %v", principalID)
-	}
-	externalID := strings.TrimPrefix(parts[1], "//")
-	parts = strings.SplitN(parts[0], "_", 2)
-	if len(parts) != 2 {
-		return "", "", "", errors.Errorf("invalid principal id %v", principalID)
-	}
-
-	principalType := parts[1]
-	return parts[0], principalType, externalID, nil
 }
