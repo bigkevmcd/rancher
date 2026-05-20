@@ -151,6 +151,8 @@ func TestRunCleanup(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, globalRoleBindingStore, 1)
 	assert.Len(t, clusterRoleTemplateBindingStore, 1)
+	assert.NotContains(t, clusterRoleTemplateBindingStore, "local:azure", "azure CRTB should have been deleted")
+	assert.Contains(t, clusterRoleTemplateBindingStore, "local:ping", "ping CRTB should remain")
 	assert.Len(t, projectRoleTemplateBindingStore, 1)
 	assert.Len(t, userStore, 2)
 	assert.Len(t, secretStore, 1)
@@ -162,6 +164,42 @@ func TestRunCleanup(t *testing.T) {
 		principalID := user.PrincipalIDs[0]
 		assert.Truef(t, strings.HasPrefix(principalID, "local"), "the only principal ID has 'local' as a prefix, got %s", principalID)
 	}
+}
+
+func TestDeleteGlobalRoleBindingsByUserPrincipal(t *testing.T) {
+	var globalRoleBindingStore = map[string]*v3.GlobalRoleBinding{
+		// Bound via a user principal — should be deleted.
+		"azure-user-grb": {
+			ObjectMeta:        metav1.ObjectMeta{Name: "azure-user-grb"},
+			UserPrincipalName: "azuread_user://someuser",
+		},
+		// Belongs to a different provider — should remain.
+		"ping-grb": {
+			ObjectMeta:         metav1.ObjectMeta{Name: "ping-grb"},
+			GroupPrincipalName: "ping_group://mygroup",
+		},
+	}
+
+	svc := newMockCleanupService(t,
+		globalRoleBindingStore,
+		map[string]*v3.ProjectRoleTemplateBinding{},
+		map[string]*v3.ClusterRoleTemplateBinding{},
+		map[string]*v3.Token{},
+		map[string]*v3.User{},
+		map[string]*v1.Secret{},
+	)
+	cfg := v3.AuthConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "azuread",
+		},
+		Type: client.AzureADConfigType,
+	}
+
+	err := svc.Run(&cfg)
+
+	require.NoError(t, err)
+	assert.NotContains(t, globalRoleBindingStore, "azure-user-grb", "GRB bound via user principal should have been deleted")
+	assert.Contains(t, globalRoleBindingStore, "ping-grb", "GRB from a different provider should remain")
 }
 
 func newMockCleanupService(t *testing.T,
