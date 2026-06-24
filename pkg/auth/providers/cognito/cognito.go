@@ -62,7 +62,7 @@ func (p *CognitoProvider) CanRefreshPrincipals() bool { return true }
 func (p *CognitoProvider) Logout(w http.ResponseWriter, r *http.Request, token accessor.TokenAccessor) error {
 	providerName := token.GetAuthProvider()
 	logrus.Debugf("CognitoProvider [logout]: triggered by provider %s", providerName)
-	oidcConfig, err := p.GetConfig()
+	oidcConfig, err := p.GetConfig(providerName)
 	if err != nil {
 		return fmt.Errorf("getting config for OIDC Logout: %w", err)
 	}
@@ -75,12 +75,12 @@ func (p *CognitoProvider) Logout(w http.ResponseWriter, r *http.Request, token a
 
 func (p *CognitoProvider) LogoutAll(w http.ResponseWriter, r *http.Request, token accessor.TokenAccessor) error {
 	logrus.Debugf("CognitoProvider [logout-all]: triggered by provider %s", token.GetAuthProvider())
-	oidcConfig, err := p.GetConfig()
+	providerName := token.GetAuthProvider()
+	oidcConfig, err := p.GetConfig(providerName)
 	if err != nil {
 		return err
 	}
 
-	providerName := token.GetAuthProvider()
 	if !oidcConfig.LogoutAllEnabled {
 		return fmt.Errorf("CognitoProvider [logout-all]: Rancher provider resource `%v` not configured for SLO", providerName)
 	}
