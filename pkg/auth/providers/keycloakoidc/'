@@ -154,7 +154,7 @@ func TestKeycloakOIDCProvider_SearchPrincipals(t *testing.T) {
 				TokenMgr: createTokenManager,
 			},
 		}
-		g.GetConfig = func(string) (*apiv3.OIDCConfig, error) {
+		g.GetConfig = func() (*apiv3.OIDCConfig, error) {
 			return oidcConfig, nil
 		}
 		result, err := g.SearchPrincipals("user1", UserType, &apiv3.Token{
