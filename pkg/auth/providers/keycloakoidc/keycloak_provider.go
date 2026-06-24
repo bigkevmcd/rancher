@@ -95,7 +95,7 @@ func (k *keyCloakOIDCProvider) SearchPrincipals(searchValue, principalType strin
 	var principals []apiv3.Principal
 	var err error
 
-	config, err := k.GetConfig()
+	config, err := k.GetConfig(token.GetAuthProvider())
 	if err != nil {
 		return principals, err
 	}
@@ -157,7 +157,7 @@ func (k *keyCloakOIDCProvider) toPrincipal(principalType string, acct account, t
 }
 
 func (k *keyCloakOIDCProvider) GetPrincipal(principalID string, token accessor.TokenAccessor) (apiv3.Principal, error) {
-	config, err := k.GetOIDCConfig()
+	config, err := k.GetOIDCConfig(token.GetAuthProvider())
 	if err != nil {
 		return apiv3.Principal{}, err
 	}
