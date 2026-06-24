@@ -34,7 +34,7 @@ func TestLogoutAllWhenNotEnabled(t *testing.T) {
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: oidc.OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+				GetConfig: func(string) (*v3.OIDCConfig, error) { return oidcConfig, nil },
 			},
 		},
 	}
@@ -64,7 +64,7 @@ func TestLogoutAll(t *testing.T) {
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: oidc.OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+				GetConfig: func(string) (*v3.OIDCConfig, error) { return oidcConfig, nil },
 			},
 		},
 	}
@@ -101,7 +101,7 @@ func TestLogoutAllNoEndSessionEndpoint(t *testing.T) {
 		GenOIDCProvider: genericoidc.GenOIDCProvider{
 			OpenIDCProvider: oidc.OpenIDCProvider{
 				Name:      providerName,
-				GetConfig: func() (*v3.OIDCConfig, error) { return oidcConfig, nil },
+				GetConfig: func(string) (*v3.OIDCConfig, error) { return oidcConfig, nil },
 			},
 		},
 	}
@@ -145,7 +145,7 @@ func TestLogout(t *testing.T) {
 				GenOIDCProvider: genericoidc.GenOIDCProvider{
 					OpenIDCProvider: oidc.OpenIDCProvider{
 						Name:      providerName,
-						GetConfig: func() (*v3.OIDCConfig, error) { return tt.config, nil },
+						GetConfig: func(string) (*v3.OIDCConfig, error) { return tt.config, nil },
 					},
 				},
 			}
