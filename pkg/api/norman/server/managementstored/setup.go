@@ -41,6 +41,7 @@ import (
 	"github.com/rancher/rancher/pkg/clusterrouter"
 	"github.com/rancher/rancher/pkg/encryptedstore"
 	exttokenstore "github.com/rancher/rancher/pkg/ext/stores/tokens"
+	"github.com/rancher/rancher/pkg/features"
 	md "github.com/rancher/rancher/pkg/kontainerdrivermetadata"
 	managementschema "github.com/rancher/rancher/pkg/schemas/management.cattle.io/v3"
 	projectschema "github.com/rancher/rancher/pkg/schemas/project.cattle.io/v3"
@@ -54,7 +55,7 @@ func Setup(ctx context.Context, apiContext *config.ScaledContext, clusterManager
 
 	factory := &crd.Factory{ClientGetter: apiContext.ClientGetter}
 
-	factory.BatchCreateCRDs(ctx, config.ManagementStorageContext, scheme.Scheme, schemas, &managementschema.Version,
+	typesToRegister := []string{
 		client.AuthConfigType,
 		client.ClusterRegistrationTokenType,
 		client.ClusterRoleTemplateBindingType,
@@ -69,7 +70,6 @@ func Setup(ctx context.Context, apiContext *config.ScaledContext, clusterManager
 		client.KontainerDriverType,
 		client.NodeDriverType,
 		client.NodeType,
-		client.OIDCClientType,
 		client.PodSecurityAdmissionConfigurationTemplateType,
 		client.PreferenceType,
 		client.ProjectNetworkPolicyType,
@@ -81,6 +81,14 @@ func Setup(ctx context.Context, apiContext *config.ScaledContext, clusterManager
 		client.TokenType,
 		client.UserAttributeType,
 		client.UserType,
+	}
+
+	if features.OIDCProvider.Enabled() == true {
+		typesToRegister = append(typesToRegister, client.OIDCClientType)
+	}
+
+	factory.BatchCreateCRDs(ctx, config.ManagementStorageContext, scheme.Scheme, schemas, &managementschema.Version,
+		typesToRegister...,
 	)
 
 	factory.BatchCreateCRDs(ctx, config.ManagementStorageContext, scheme.Scheme, schemas, &managementschema.Version,
