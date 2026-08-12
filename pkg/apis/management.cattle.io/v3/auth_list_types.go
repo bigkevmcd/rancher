@@ -101,3 +101,13 @@ type KeyCloakOIDCConfigList struct {
 
 	Items []KeyCloakOIDCConfig `json:"items"`
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// GithubAppConfigList is a list of GithubConfig resources
+type GithubAppConfigList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []GithubAppConfig `json:"items"`
+}

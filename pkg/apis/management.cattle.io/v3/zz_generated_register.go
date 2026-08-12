@@ -53,6 +53,7 @@ var (
 	GoogleOAuthProviderResourceName                       = "googleoauthproviders"
 	GroupResourceName                                     = "groups"
 	GroupMemberResourceName                               = "groupmembers"
+	KeyCloakOIDCProviderResourceName                      = "keycloakoidcproviders"
 	KontainerDriverResourceName                           = "kontainerdrivers"
 	LocalProviderResourceName                             = "localproviders"
 	ManagedChartResourceName                              = "managedcharts"
@@ -149,6 +150,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&GroupList{},
 		&GroupMember{},
 		&GroupMemberList{},
+		&KeyCloakOIDCProvider{},
+		&KeyCloakOIDCProviderList{},
 		&KontainerDriver{},
 		&KontainerDriverList{},
 		&LocalProvider{},

@@ -267,7 +267,9 @@ type OIDCLogin struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type KeyCloakOIDCProvider struct {
-	OIDCProvider `json:",inline"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	AuthProvider      `json:",inline"`
 
 	RedirectURL string `json:"redirectUrl"`
 	Scopes      string `json:"scopes"`

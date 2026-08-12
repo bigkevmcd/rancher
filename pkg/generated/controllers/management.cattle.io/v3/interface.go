@@ -56,6 +56,7 @@ type Interface interface {
 	GoogleOAuthProvider() GoogleOAuthProviderController
 	Group() GroupController
 	GroupMember() GroupMemberController
+	KeyCloakOIDCProvider() KeyCloakOIDCProviderController
 	KontainerDriver() KontainerDriverController
 	LocalProvider() LocalProviderController
 	ManagedChart() ManagedChartController
@@ -189,6 +190,10 @@ func (v *version) Group() GroupController {
 
 func (v *version) GroupMember() GroupMemberController {
 	return generic.NewNonNamespacedController[*v3.GroupMember, *v3.GroupMemberList](schema.GroupVersionKind{Group: "management.cattle.io", Version: "v3", Kind: "GroupMember"}, "groupmembers", v.controllerFactory)
+}
+
+func (v *version) KeyCloakOIDCProvider() KeyCloakOIDCProviderController {
+	return generic.NewNonNamespacedController[*v3.KeyCloakOIDCProvider, *v3.KeyCloakOIDCProviderList](schema.GroupVersionKind{Group: "management.cattle.io", Version: "v3", Kind: "KeyCloakOIDCProvider"}, "keycloakoidcproviders", v.controllerFactory)
 }
 
 func (v *version) KontainerDriver() KontainerDriverController {

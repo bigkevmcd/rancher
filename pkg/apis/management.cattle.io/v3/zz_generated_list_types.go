@@ -451,6 +451,23 @@ func NewGroupMember(namespace, name string, obj GroupMember) *GroupMember {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// KeyCloakOIDCProviderList is a list of KeyCloakOIDCProvider resources
+type KeyCloakOIDCProviderList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []KeyCloakOIDCProvider `json:"items"`
+}
+
+func NewKeyCloakOIDCProvider(namespace, name string, obj KeyCloakOIDCProvider) *KeyCloakOIDCProvider {
+	obj.APIVersion, obj.Kind = SchemeGroupVersion.WithKind("KeyCloakOIDCProvider").ToAPIVersionAndKind()
+	obj.Name = name
+	obj.Namespace = namespace
+	return &obj
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 // KontainerDriverList is a list of KontainerDriver resources
 type KontainerDriverList struct {
 	metav1.TypeMeta `json:",inline"`
