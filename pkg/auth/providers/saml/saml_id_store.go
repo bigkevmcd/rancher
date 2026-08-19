@@ -55,8 +55,7 @@ func (s *configMapAssertionStore) seen(id string, expiry time.Time) (bool, error
 			Labels:    configMapLabels,
 		},
 		Data: map[string]string{
-			"assertionID": id,
-			"expiry":      strconv.FormatInt(expiry.Unix(), 10),
+			"expiry": strconv.FormatInt(expiry.Unix(), 10),
 		},
 	}
 	const maxRetries = 3
