@@ -123,8 +123,7 @@ func TestCleanUpExpiredAssertionIDs(t *testing.T) {
 			Labels: configMapLabels,
 		},
 		Data: map[string]string{
-			"assertionID": "expired",
-			"expiry":      strconv.FormatInt(now.Add(-time.Minute).Unix(), 10),
+			"expiry": strconv.FormatInt(now.Add(-time.Minute).Unix(), 10),
 		},
 	}
 	liveConfigMap := &corev1.ConfigMap{
@@ -133,8 +132,7 @@ func TestCleanUpExpiredAssertionIDs(t *testing.T) {
 			Labels: configMapLabels,
 		},
 		Data: map[string]string{
-			"assertionID": "live",
-			"expiry":      strconv.FormatInt(now.Add(time.Minute).Unix(), 10),
+			"expiry": strconv.FormatInt(now.Add(time.Minute).Unix(), 10),
 		},
 	}
 	nonAssertionConfigMap := &corev1.ConfigMap{
