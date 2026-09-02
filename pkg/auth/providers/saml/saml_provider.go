@@ -56,7 +56,7 @@ type Provider struct {
 	sloEnabled      bool
 	sloForced       bool
 
-	getSamlConfig  func() (*apiv3.SamlConfig, error)
+	getSamlConfig  func(string) (*apiv3.SamlConfig, error)
 	assertionStore assertionStore
 }
 
@@ -262,8 +262,8 @@ func PerformSamlLogin(r *http.Request, w http.ResponseWriter, name string, input
 	return nil
 }
 
-func (s *Provider) getSamlConfigFromUnstructured() (*apiv3.SamlConfig, error) {
-	authConfigObj, err := s.authConfigs.ObjectClient().UnstructuredClient().Get(s.name, metav1.GetOptions{})
+func (s *Provider) getSamlConfigFromUnstructured(configName string) (*apiv3.SamlConfig, error) {
+	authConfigObj, err := s.authConfigs.ObjectClient().UnstructuredClient().Get(configName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("SAML: failed to retrieve SamlConfig, error: %v", err)
 	}
@@ -273,7 +273,6 @@ func (s *Provider) getSamlConfigFromUnstructured() (*apiv3.SamlConfig, error) {
 		return nil, fmt.Errorf("SAML: failed to retrieve SamlConfig, cannot read k8s Unstructured data")
 	}
 	storedSamlConfigMap := u.UnstructuredContent()
-
 	storedSamlConfig := &apiv3.SamlConfig{}
 	err = common.Decode(storedSamlConfigMap, storedSamlConfig)
 	if err != nil {
@@ -299,7 +298,7 @@ func (s *Provider) getSamlConfigFromUnstructured() (*apiv3.SamlConfig, error) {
 func (s *Provider) saveSamlConfig(config *apiv3.SamlConfig) error {
 	var configType string
 
-	storedSamlConfig, err := s.getSamlConfig()
+	storedSamlConfig, err := s.getSamlConfig(config.Name)
 	if err != nil {
 		return err
 	}
@@ -465,7 +464,11 @@ func (s *Provider) isThisUserMe(me, other apiv3.Principal) bool {
 }
 
 func (s *Provider) CanAccessWithGroupProviders(userPrincipalID string, groupPrincipals []apiv3.Principal) (bool, error) {
-	config, err := s.getSamlConfig()
+	configName, _, _, err := common.SplitPrincipalID(userPrincipalID)
+	if err != nil {
+		return false, err
+	}
+	config, err := s.getSamlConfig(configName)
 	if err != nil {
 		logrus.Errorf("Error fetching saml config: %v", err)
 		return false, err
@@ -568,8 +571,8 @@ func (s *Provider) GetUserExtraAttributes(userPrincipal apiv3.Principal) map[str
 }
 
 // IsDisabledProvider checks if the SAML auth provider is currently disabled in Rancher.
-func (s *Provider) IsDisabledProvider(_ string) (bool, error) {
-	samlConfig, err := s.getSamlConfig()
+func (s *Provider) IsDisabledProvider(configName string) (bool, error) {
+	samlConfig, err := s.getSamlConfig(configName)
 	if err != nil {
 		return false, err
 	}

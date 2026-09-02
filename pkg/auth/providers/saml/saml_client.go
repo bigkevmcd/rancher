@@ -1,6 +1,7 @@
 package saml
 
 import (
+	"cmp"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -123,6 +124,7 @@ func InitializeSamlServiceProvider(configToSet *apiv3.SamlConfig, name string) e
 
 	rancherAPIHost := strings.TrimRight(configToSet.RancherAPIHost, "/")
 	samlURL := rancherAPIHost + "/v1-saml/"
+
 	samlURL += name
 	actURL, err := url.Parse(samlURL)
 	if err != nil {
@@ -130,11 +132,11 @@ func InitializeSamlServiceProvider(configToSet *apiv3.SamlConfig, name string) e
 	}
 
 	metadataURL := *actURL
-	metadataURL.Path = metadataURL.Path + "/saml/metadata"
+	metadataURL.Path = metadataURL.Path + "/" + configToSet.Name + "/saml/metadata"
 	acsURL := *actURL
-	acsURL.Path = acsURL.Path + "/saml/acs"
+	acsURL.Path = acsURL.Path + "/" + configToSet.Name + "/saml/acs"
 	sloURL := *actURL
-	sloURL.Path = sloURL.Path + "/saml/slo"
+	sloURL.Path = sloURL.Path + "/" + configToSet.Name + "/saml/slo"
 
 	sp := saml.ServiceProvider{
 		Key:             privKey,
@@ -293,40 +295,74 @@ func AuthHandler() http.Handler {
 
 	root = http.NewServeMux()
 
+	// There are two different registrations for ping and ping/configName.
 	root.HandleFunc("POST /v1-saml/ping/saml/acs", getRouteHandler("PingACS"))
 	root.HandleFunc("POST /v1-saml/ping/saml/slo", getRouteHandler("PingSLO"))
 	root.HandleFunc("GET /v1-saml/ping/saml/slo", getRouteHandler("PingSLOGet"))
 	root.HandleFunc("GET /v1-saml/ping/saml/metadata", getRouteHandler("PingMetadata"))
 
+	root.HandleFunc("POST /v1-saml/ping/{configName}/saml/acs", getRouteHandler("PingACS"))
+	root.HandleFunc("POST /v1-saml/ping/{configName}/saml/slo", getRouteHandler("PingSLO"))
+	root.HandleFunc("GET /v1-saml/ping/{configName}/saml/slo", getRouteHandler("PingSLOGet"))
+	root.HandleFunc("GET /v1-saml/ping/{configName}/saml/metadata", getRouteHandler("PingMetadata"))
+
+	// There are two different registrations for adfs/saml and
+	// adfs/saml/configName.
 	root.HandleFunc("POST /v1-saml/adfs/saml/acs", getRouteHandler("AdfsACS"))
 	root.HandleFunc("POST /v1-saml/adfs/saml/slo", getRouteHandler("AdfsSLO"))
 	root.HandleFunc("GET /v1-saml/adfs/saml/slo", getRouteHandler("AdfsSLOGet"))
 	root.HandleFunc("GET /v1-saml/adfs/saml/metadata", getRouteHandler("AdfsMetadata"))
 
+	root.HandleFunc("POST /v1-saml/adfs/{configName}/saml/acs", getRouteHandler("AdfsACS"))
+	root.HandleFunc("POST /v1-saml/adfs/{configName}/saml/slo", getRouteHandler("AdfsSLO"))
+	root.HandleFunc("GET /v1-saml/adfs/{configName}/saml/slo", getRouteHandler("AdfsSLOGet"))
+	root.HandleFunc("GET /v1-saml/adfs/{configName}/saml/metadata", getRouteHandler("AdfsMetadata"))
+
+	// There are two different registrations for keycloak/saml and
+	// keycloak/saml/configName.
 	root.HandleFunc("POST /v1-saml/keycloak/saml/acs", getRouteHandler("KeyCloakACS"))
 	root.HandleFunc("POST /v1-saml/keycloak/saml/slo", getRouteHandler("KeyCloakSLO"))
 	root.HandleFunc("GET /v1-saml/keycloak/saml/slo", getRouteHandler("KeyCloakSLOGet"))
 	root.HandleFunc("GET /v1-saml/keycloak/saml/metadata", getRouteHandler("KeyCloakMetadata"))
 
+	root.HandleFunc("POST /v1-saml/keycloak/{configName}/saml/acs", getRouteHandler("KeyCloakACS"))
+	root.HandleFunc("POST /v1-saml/keycloak/{configName}/saml/slo", getRouteHandler("KeyCloakSLO"))
+	root.HandleFunc("GET /v1-saml/keycloak/{configName}/saml/slo", getRouteHandler("KeyCloakSLOGet"))
+	root.HandleFunc("GET /v1-saml/keycloak/{configName}/saml/metadata", getRouteHandler("KeyCloakMetadata"))
+
+	// There are two different registrations for okta/saml and
+	// okta/saml/configName.
 	root.HandleFunc("POST /v1-saml/okta/saml/acs", getRouteHandler("OktaACS"))
 	root.HandleFunc("POST /v1-saml/okta/saml/slo", getRouteHandler("OktaSLO"))
 	root.HandleFunc("GET /v1-saml/okta/saml/slo", getRouteHandler("OktaSLOGet"))
 	root.HandleFunc("GET /v1-saml/okta/saml/metadata", getRouteHandler("OktaMetadata"))
 
-	root.HandleFunc("POST /v1-saml/okta/saml/{configName}/acs", getRouteHandler("OktaACS"))
-	root.HandleFunc("POST /v1-saml/okta/saml/{configName}/slo", getRouteHandler("OktaSLO"))
-	root.HandleFunc("GET /v1-saml/okta/saml/{configName}/slo", getRouteHandler("OktaSLOGet"))
-	root.HandleFunc("GET /v1-saml/okta/saml/{configName}/metadata", getRouteHandler("OktaMetadata"))
+	root.HandleFunc("POST /v1-saml/okta/{configName}/saml/acs", getRouteHandler("OktaACS"))
+	root.HandleFunc("POST /v1-saml/okta/{configName}/saml/slo", getRouteHandler("OktaSLO"))
+	root.HandleFunc("GET /v1-saml/okta/{configName}/saml/slo", getRouteHandler("OktaSLOGet"))
+	root.HandleFunc("GET /v1-saml/okta/{configName}/saml/metadata", getRouteHandler("OktaMetadata"))
 
+	// There are two different registrations for shibboleth/saml and
+	// shibboleth/saml/configName.
 	root.HandleFunc("POST /v1-saml/shibboleth/saml/acs", getRouteHandler("ShibbolethACS"))
 	root.HandleFunc("POST /v1-saml/shibboleth/saml/slo", getRouteHandler("ShibbolethSLO"))
 	root.HandleFunc("GET /v1-saml/shibboleth/saml/slo", getRouteHandler("ShibbolethSLOGet"))
 	root.HandleFunc("GET /v1-saml/shibboleth/saml/metadata", getRouteHandler("ShibbolethMetadata"))
 
+	root.HandleFunc("POST /v1-saml/shibboleth/{configName}/saml/acs", getRouteHandler("ShibbolethACS"))
+	root.HandleFunc("POST /v1-saml/shibboleth/{configName}/saml/slo", getRouteHandler("ShibbolethSLO"))
+	root.HandleFunc("GET /v1-saml/shibboleth/{configName}/saml/slo", getRouteHandler("ShibbolethSLOGet"))
+	root.HandleFunc("GET /v1-saml/shibboleth/{configName}/saml/metadata", getRouteHandler("ShibbolethMetadata"))
+
 	root.HandleFunc("POST /v1-saml/genericsaml/saml/acs", getRouteHandler("GenericSAMLACS"))
 	root.HandleFunc("POST /v1-saml/genericsaml/saml/slo", getRouteHandler("GenericSAMLSLO"))
 	root.HandleFunc("GET /v1-saml/genericsaml/saml/slo", getRouteHandler("GenericSAMLSLOGet"))
 	root.HandleFunc("GET /v1-saml/genericsaml/saml/metadata", getRouteHandler("GenericSAMLMetadata"))
+
+	root.HandleFunc("POST /v1-saml/genericsaml/{configName}/saml/acs", getRouteHandler("GenericSAMLACS"))
+	root.HandleFunc("POST /v1-saml/genericsaml/{configName}/saml/slo", getRouteHandler("GenericSAMLSLO"))
+	root.HandleFunc("GET /v1-saml/genericsaml/{configName}/saml/slo", getRouteHandler("GenericSAMLSLOGet"))
+	root.HandleFunc("GET /v1-saml/genericsaml/{configName}/saml/metadata", getRouteHandler("GenericSAMLMetadata"))
 
 	log.Debugf("SAML [AuthHandler]: /v1-saml routes made, mux is %p", root)
 	return root
@@ -499,9 +535,11 @@ func (s *Provider) HandleSamlAssertion(w http.ResponseWriter, r *http.Request, a
 		}
 	}
 
-	config, err := s.getSamlConfig()
+	configName := cmp.Or(r.PathValue("configName"), s.name)
+
+	config, err := s.getSamlConfig(configName)
 	if err != nil {
-		log.Errorf("SAML: Error getting saml config %v", err)
+		log.Errorf("SAML: Error getting saml %v config %v", configName, err)
 		http.Redirect(w, r, redirectURL+"errorCode=500", http.StatusFound)
 		return
 	}

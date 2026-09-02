@@ -40,8 +40,7 @@ func (s *Provider) testAndEnable(request *types.APIContext) error {
 		return httperror.NewAPIError(httperror.InvalidBodyContent,
 			fmt.Sprintf("SAML: Failed to parse body: %v", err))
 	}
-
-	samlConfig, err := s.getSamlConfig()
+	samlConfig, err := s.getSamlConfig(samlLogin.ConfigName)
 	if err != nil {
 		return err
 	}

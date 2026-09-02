@@ -10,6 +10,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -18,6 +19,8 @@ const rancherUserID = "rancherUserID"
 // ServeHTTP is the handler for /saml/metadata and /saml/acs endpoints
 func (s *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serviceProvider := s.serviceProvider
+
+	logrus.Debugf("KEVIN!!!! SAML ServeHTTP  with %s and %s", r.URL.Path, r.PathValue("configName"))
 
 	log.Debugf("SAML [ServeHTTP]: Received %q %q", r.Method, r.URL)
 
@@ -117,7 +120,7 @@ func (s *Provider) HandleSamlLogin(w http.ResponseWriter, r *http.Request, userI
 	// relayState is limited to 80 bytes but also must be integrity protected.
 	// this means that we cannot use a JWT because it is way too long. Instead
 	// we set a cookie that corresponds to the state
-	relayState := base64.URLEncoding.EncodeToString(randomBytes(42))
+	relayState := base64.URLEncoding.EncodeToString(randomBytes())
 
 	secretBlock := x509.MarshalPKCS1PrivateKey(serviceProvider.Key)
 	state := jwt.New(jwt.SigningMethodHS256)
@@ -162,7 +165,7 @@ func (s *Provider) HandleSamlLogout(name string, w http.ResponseWriter, r *http.
 	// relayState is limited to 80 bytes but also must be integrity protected.
 	// this means that we cannot use a JWT because it is way too long. Instead
 	// we set a cookie that corresponds to the state
-	relayState := base64.URLEncoding.EncodeToString(randomBytes(42))
+	relayState := base64.URLEncoding.EncodeToString(randomBytes())
 
 	secretBlock := x509.MarshalPKCS1PrivateKey(serviceProvider.Key)
 	state := jwt.New(jwt.SigningMethodHS256)
@@ -186,8 +189,8 @@ func (s *Provider) HandleSamlLogout(name string, w http.ResponseWriter, r *http.
 	return redirectURL.String(), nil
 }
 
-func randomBytes(n int) []byte {
-	rv := make([]byte, n)
+func randomBytes() []byte {
+	rv := make([]byte, 42)
 	if _, err := saml.RandReader.Read(rv); err != nil {
 		panic(err)
 	}

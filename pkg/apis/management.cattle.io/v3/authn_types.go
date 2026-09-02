@@ -700,6 +700,7 @@ type SamlConfig struct {
 
 type SamlConfigTestInput struct {
 	FinalRedirectURL string `json:"finalRedirectUrl"`
+	ConfigName       string `json:"configName"`
 }
 
 type SamlConfigTestOutput struct {
