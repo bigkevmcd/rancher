@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	apiv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/auth/accessor"
+	"github.com/rancher/rancher/pkg/auth/providers/common"
 	clientv3 "github.com/rancher/rancher/pkg/client/generated/management/v3"
 	normanv3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/node"
@@ -47,6 +49,23 @@ type data struct {
 type ExecUser struct {
 	ID           string
 	AuthProvider string
+}
+
+// NewExecUser returns the exec entry user for the given user id who signed in with the given token.
+//
+// AuthProvider is set to the name of the AuthConfig the user signed in with, which may differ from
+// the provider's name when several AuthConfigs share a provider. It falls back to the token's auth
+// provider if the token's principal id can't be parsed.
+func NewExecUser(userID string, token accessor.TokenAccessor) *ExecUser {
+	configName, err := common.ConfigNameFromToken(token)
+	if err != nil || configName == "" {
+		configName = token.GetAuthProvider()
+	}
+
+	return &ExecUser{
+		ID:           userID,
+		AuthProvider: configName,
+	}
 }
 
 type Cluster struct {

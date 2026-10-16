@@ -936,8 +936,22 @@ func TestStoreCreate(t *testing.T) {
 			}
 		}
 		githubToken := newTokenStore(&v3.Token{
+			ObjectMeta:    metav1.ObjectMeta{Name: authTokenID},
+			UserID:        "u-tokenuser", // The user id must come from the request user, not the token.
+			AuthProvider:  "github",
+			UserPrincipal: v3.Principal{ObjectMeta: metav1.ObjectMeta{Name: "github_user://12345"}, Provider: "github"},
+		})
+		// A user who signed in with the custom named "github-eu" auth config of the github provider.
+		githubEUToken := newTokenStore(&v3.Token{
+			ObjectMeta:    metav1.ObjectMeta{Name: authTokenID},
+			UserID:        "u-tokenuser",
+			AuthProvider:  "github",
+			UserPrincipal: v3.Principal{ObjectMeta: metav1.ObjectMeta{Name: "github-eu_user://1234"}, Provider: "github"},
+		})
+		// A token without a principal id falls back to its auth provider.
+		githubNoPrincipalToken := newTokenStore(&v3.Token{
 			ObjectMeta:   metav1.ObjectMeta{Name: authTokenID},
-			UserID:       "u-tokenuser", // The user id must come from the request user, not the token.
+			UserID:       "u-tokenuser",
 			AuthProvider: "github",
 		})
 		openldapExtToken := newTokenStore(&ext.Token{
@@ -945,6 +959,20 @@ func TestStoreCreate(t *testing.T) {
 			Spec: ext.TokenSpec{
 				UserID:        "u-tokenuser",
 				UserPrincipal: ext.TokenPrincipal{Name: "openldap_user://cn=user", Provider: "openldap"},
+			},
+		})
+		// A user who signed in with the "corp-ldap" auth config of the openldap provider (MultiIdP).
+		corpLDAPToken := newTokenStore(&v3.Token{
+			ObjectMeta:    metav1.ObjectMeta{Name: authTokenID},
+			UserID:        "u-tokenuser",
+			AuthProvider:  "openldap",
+			UserPrincipal: v3.Principal{ObjectMeta: metav1.ObjectMeta{Name: "corp-ldap_user://cn=user"}, Provider: "openldap"},
+		})
+		corpLDAPExtToken := newTokenStore(&ext.Token{
+			ObjectMeta: metav1.ObjectMeta{Name: authTokenID},
+			Spec: ext.TokenSpec{
+				UserID:        "u-tokenuser",
+				UserPrincipal: ext.TokenPrincipal{Name: "corp-ldap_user://cn=user", Provider: "openldap"},
 			},
 		})
 
@@ -992,6 +1020,34 @@ func TestStoreCreate(t *testing.T) {
 				tokenStore:      openldapExtToken,
 				wantRancherArgs: getToken("--user-id="+userID, "--auth-provider=openldap"),
 				wantACEArgs:     getToken("--cluster="+downstream2, "--user-id="+userID, "--auth-provider=openldap"),
+			},
+			{
+				name:            "get-token command names a custom named auth config",
+				execGetToken:    true,
+				tokenStore:      githubEUToken,
+				wantRancherArgs: getToken("--user-id="+userID, "--auth-provider=github-eu"),
+				wantACEArgs:     getToken("--cluster="+downstream2, "--user-id="+userID, "--auth-provider=github-eu"),
+			},
+			{
+				name:            "get-token command falls back to the auth provider without a principal id",
+				execGetToken:    true,
+				tokenStore:      githubNoPrincipalToken,
+				wantRancherArgs: getToken("--user-id="+userID, "--auth-provider=github"),
+				wantACEArgs:     getToken("--cluster="+downstream2, "--user-id="+userID, "--auth-provider=github"),
+			},
+			{
+				name:            "get-token command names the auth config the user signed in with",
+				execGetToken:    true,
+				tokenStore:      corpLDAPToken,
+				wantRancherArgs: getToken("--user-id="+userID, "--auth-provider=corp-ldap"),
+				wantACEArgs:     getToken("--cluster="+downstream2, "--user-id="+userID, "--auth-provider=corp-ldap"),
+			},
+			{
+				name:            "get-token command with ext request token names the auth config the user signed in with",
+				execGetToken:    true,
+				tokenStore:      corpLDAPExtToken,
+				wantRancherArgs: getToken("--user-id="+userID, "--auth-provider=corp-ldap"),
+				wantACEArgs:     getToken("--cluster="+downstream2, "--user-id="+userID, "--auth-provider=corp-ldap"),
 			},
 			{
 				name:            "get-token command without auth provider",

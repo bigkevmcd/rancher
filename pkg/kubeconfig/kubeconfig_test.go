@@ -3,12 +3,15 @@ package kubeconfig
 import (
 	"testing"
 
+	extv1 "github.com/rancher/rancher/pkg/apis/ext.cattle.io/v1"
 	apiv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/auth/accessor"
 	clientv3 "github.com/rancher/rancher/pkg/client/generated/management/v3"
 	normanv3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -22,6 +25,86 @@ func loadConfig(t *testing.T, content string) *clientcmdapi.Config {
 	require.NoError(t, err)
 
 	return config
+}
+
+func TestNewExecUser(t *testing.T) {
+	t.Parallel()
+
+	const userID = "u-w7drc"
+
+	v3Token := func(authProvider, principalID string) accessor.TokenAccessor {
+		return &apiv3.Token{
+			UserID:        "u-tokenuser",
+			AuthProvider:  authProvider,
+			UserPrincipal: apiv3.Principal{ObjectMeta: metav1.ObjectMeta{Name: principalID}, Provider: authProvider},
+		}
+	}
+	extToken := func(authProvider, principalID string) accessor.TokenAccessor {
+		return &extv1.Token{
+			Spec: extv1.TokenSpec{
+				UserID:        "u-tokenuser",
+				UserPrincipal: extv1.TokenPrincipal{Name: principalID, Provider: authProvider},
+			},
+		}
+	}
+
+	tests := []struct {
+		name  string
+		token accessor.TokenAccessor
+		want  string
+	}{
+		{
+			name:  "auth config named after its provider",
+			token: v3Token("github", "github_user://12345"),
+			want:  "github",
+		},
+		{
+			name:  "custom named auth config",
+			token: v3Token("github", "github-eu_user://1234"),
+			want:  "github-eu",
+		},
+		{
+			name:  "custom named auth config with ext token",
+			token: extToken("github", "github-eu_user://1234"),
+			want:  "github-eu",
+		},
+		{
+			name:  "custom named auth config with distinguished name",
+			token: v3Token("openldap", "corp-ldap_user://cn=user,dc=example,dc=com"),
+			want:  "corp-ldap",
+		},
+		{
+			name:  "local user",
+			token: v3Token("local", "local://u-w7drc"),
+			want:  "local",
+		},
+		{
+			name:  "falls back to the auth provider without a principal id",
+			token: v3Token("github", ""),
+			want:  "github",
+		},
+		{
+			name:  "falls back to the auth provider with an invalid principal id",
+			token: v3Token("github", "not-a-principal-id"),
+			want:  "github",
+		},
+		{
+			name:  "no auth provider without a principal id",
+			token: v3Token("", ""),
+			want:  "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			execUser := NewExecUser(userID, test.token)
+			require.NotNil(t, execUser)
+			assert.Equal(t, userID, execUser.ID)
+			assert.Equal(t, test.want, execUser.AuthProvider)
+		})
+	}
 }
 
 func TestForTokenBased(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"github.com/rancher/rancher/pkg/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8suser "k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/client-go/tools/clientcmd"
@@ -71,6 +72,7 @@ func TestKubeconfigDownload(t *testing.T) {
 		name          string
 		execGetToken  string
 		authProvider  string
+		principalID   string
 		tokenFetchErr error
 
 		wantErr  bool
@@ -80,6 +82,7 @@ func TestKubeconfigDownload(t *testing.T) {
 			name:         "token command with setting off",
 			execGetToken: "false",
 			authProvider: "github",
+			principalID:  "github_user://12345",
 			wantArgs:     []string{"token", "--server=" + fakeHost, "--user=" + testClusterID},
 		},
 		{
@@ -92,7 +95,35 @@ func TestKubeconfigDownload(t *testing.T) {
 			name:         "get-token command",
 			execGetToken: "true",
 			authProvider: "github",
+			principalID:  "github_user://12345",
 			wantArgs:     []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=github"},
+		},
+		{
+			name:         "get-token command names a custom named auth config",
+			execGetToken: "true",
+			authProvider: "github",
+			principalID:  "github-eu_user://1234",
+			wantArgs:     []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=github-eu"},
+		},
+		{
+			name:         "get-token command falls back to the auth provider without a principal id",
+			execGetToken: "true",
+			authProvider: "github",
+			wantArgs:     []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=github"},
+		},
+		{
+			name:         "get-token command names the auth config the user signed in with",
+			execGetToken: "true",
+			authProvider: "openldap",
+			principalID:  "corp-ldap_user://cn=user,dc=example,dc=com",
+			wantArgs:     []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=corp-ldap"},
+		},
+		{
+			name:         "get-token command names the auth config named after its provider",
+			execGetToken: "true",
+			authProvider: "openldap",
+			principalID:  "openldap_user://cn=user,dc=example,dc=com",
+			wantArgs:     []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=openldap"},
 		},
 		{
 			name:         "get-token command without auth provider",
@@ -136,8 +167,12 @@ func TestKubeconfigDownload(t *testing.T) {
 
 			handler := kubeconfigDownload{
 				authToken: &fakeAuthToken{
-					token: apimgmtv3.Token{UserID: "u-tokenuser", AuthProvider: test.authProvider}, // The user id must come from the request user, not the token.
-					err:   test.tokenFetchErr,
+					token: apimgmtv3.Token{
+						UserID:        "u-tokenuser", // The user id must come from the request user, not the token.
+						AuthProvider:  test.authProvider,
+						UserPrincipal: apimgmtv3.Principal{ObjectMeta: metav1.ObjectMeta{Name: test.principalID}, Provider: test.authProvider},
+					},
+					err: test.tokenFetchErr,
 				},
 			}
 			handler.ServeHTTP(httptest.NewRecorder(), apiRequest.Request)

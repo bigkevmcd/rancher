@@ -258,6 +258,7 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 		generateToken     string
 		clusterAceEnabled bool
 		authProvider      string
+		principalID       string
 		tokenFetchErr     error
 
 		wantErr   bool
@@ -269,6 +270,7 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 			execGetToken:  "false",
 			generateToken: "false",
 			authProvider:  "github",
+			principalID:   "github_user://12345",
 			wantArgs:      []string{"token", "--server=" + fakeHost, "--user=" + testClusterName},
 		},
 		{
@@ -283,6 +285,7 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 			execGetToken:  "true",
 			generateToken: "false",
 			authProvider:  "github",
+			principalID:   "github_user://12345",
 			wantArgs:      []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=github"},
 		},
 		{
@@ -291,7 +294,57 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 			generateToken:     "false",
 			clusterAceEnabled: true,
 			authProvider:      "github",
+			principalID:       "github_user://12345",
 			wantArgs:          []string{"auth", "get-token", "--server=" + fakeHost, "--cluster=" + testClusterName, "--user-id=" + testUserID, "--auth-provider=github"},
+		},
+		{
+			name:          "get-token command names a custom named auth config",
+			execGetToken:  "true",
+			generateToken: "false",
+			authProvider:  "github",
+			principalID:   "github-eu_user://1234",
+			wantArgs:      []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=github-eu"},
+		},
+		{
+			name:              "get-token command with authorized cluster endpoint names a custom named auth config",
+			execGetToken:      "true",
+			generateToken:     "false",
+			clusterAceEnabled: true,
+			authProvider:      "github",
+			principalID:       "github-eu_user://1234",
+			wantArgs:          []string{"auth", "get-token", "--server=" + fakeHost, "--cluster=" + testClusterName, "--user-id=" + testUserID, "--auth-provider=github-eu"},
+		},
+		{
+			name:          "get-token command falls back to the auth provider without a principal id",
+			execGetToken:  "true",
+			generateToken: "false",
+			authProvider:  "github",
+			wantArgs:      []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=github"},
+		},
+		{
+			name:          "get-token command names the auth config the user signed in with",
+			execGetToken:  "true",
+			generateToken: "false",
+			authProvider:  "openldap",
+			principalID:   "corp-ldap_user://cn=user,dc=example,dc=com",
+			wantArgs:      []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=corp-ldap"},
+		},
+		{
+			name:              "get-token command with authorized cluster endpoint names the auth config the user signed in with",
+			execGetToken:      "true",
+			generateToken:     "false",
+			clusterAceEnabled: true,
+			authProvider:      "openldap",
+			principalID:       "corp-ldap_user://cn=user,dc=example,dc=com",
+			wantArgs:          []string{"auth", "get-token", "--server=" + fakeHost, "--cluster=" + testClusterName, "--user-id=" + testUserID, "--auth-provider=corp-ldap"},
+		},
+		{
+			name:          "get-token command names the auth config named after its provider",
+			execGetToken:  "true",
+			generateToken: "false",
+			authProvider:  "openldap",
+			principalID:   "openldap_user://cn=user,dc=example,dc=com",
+			wantArgs:      []string{"auth", "get-token", "--server=" + fakeHost, "--user-id=" + testUserID, "--auth-provider=openldap"},
 		},
 		{
 			name:          "get-token command without auth provider",
@@ -311,6 +364,7 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 			execGetToken:  "true",
 			generateToken: "true",
 			authProvider:  "github",
+			principalID:   "github_user://12345",
 			wantToken:     "kubeconfig-" + testUserID + ":tokenvalue",
 		},
 		{
@@ -319,6 +373,7 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 			generateToken:     "true",
 			clusterAceEnabled: true,
 			authProvider:      "github",
+			principalID:       "github_user://12345",
 			wantToken:         "kubeconfig-" + testUserID + ":tokenvalue",
 		},
 	}
@@ -362,8 +417,9 @@ func TestGenerateKubeconfigActionHandlerExecUser(t *testing.T) {
 				TokenMgr: &fakeTokenManager{},
 				AuthToken: &fakeAuthToken{
 					token: apimgmtv3.Token{
-						UserID:       "u-tokenuser", // The user id must come from the request user, not the token.
-						AuthProvider: test.authProvider,
+						UserID:        "u-tokenuser", // The user id must come from the request user, not the token.
+						AuthProvider:  test.authProvider,
+						UserPrincipal: apimgmtv3.Principal{ObjectMeta: metav1.ObjectMeta{Name: test.principalID}, Provider: test.authProvider},
 					},
 					err: test.tokenFetchErr,
 				},

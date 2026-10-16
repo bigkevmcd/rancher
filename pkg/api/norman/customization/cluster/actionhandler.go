@@ -111,17 +111,14 @@ func (a ActionHandler) createTokenInput(apiContext *types.APIContext) (user.Toke
 	}, nil
 }
 
-// execUser returns the requesting user and their auth provider for the exec entry of a kubeconfig without a token.
+// execUser returns the requesting user and the AuthConfig they signed in with for the exec entry of a kubeconfig without a token.
 func (a ActionHandler) execUser(apiContext *types.APIContext) (*kubeconfig.ExecUser, error) {
 	authToken, err := a.AuthToken.TokenFromRequest(apiContext.Request)
 	if err != nil {
 		return nil, err
 	}
 
-	return &kubeconfig.ExecUser{
-		ID:           a.UserMgr.GetUser(apiContext.Request),
-		AuthProvider: authToken.GetAuthProvider(),
-	}, nil
+	return kubeconfig.NewExecUser(a.UserMgr.GetUser(apiContext.Request), authToken), nil
 }
 
 // generateKubeConfigBearer is the core of generateKubeConfig providing the

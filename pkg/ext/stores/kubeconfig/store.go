@@ -503,10 +503,7 @@ func (s *Store) Create(
 
 	if s.shouldExecGetToken() {
 		// User entries without a token, including those of a dry run, run "rancher auth get-token".
-		data.ExecUser = &kconfig.ExecUser{
-			ID:           userInfo.GetName(),
-			AuthProvider: authToken.GetAuthProvider(),
-		}
+		data.ExecUser = kconfig.NewExecUser(userInfo.GetName(), authToken)
 	}
 
 	err = func() error { // Deliberately use an anonymous function to capture the status and error conditions.

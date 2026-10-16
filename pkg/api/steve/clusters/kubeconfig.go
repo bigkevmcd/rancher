@@ -59,10 +59,7 @@ func (k kubeconfigDownload) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 			apiRequest.WriteError(err)
 			return
 		}
-		execUser = &kubeconfig.ExecUser{
-			ID:           userName.GetName(),
-			AuthProvider: authToken.GetAuthProvider(),
-		}
+		execUser = kubeconfig.NewExecUser(userName.GetName(), authToken)
 	}
 
 	host := settings.ServerURL.Get()
