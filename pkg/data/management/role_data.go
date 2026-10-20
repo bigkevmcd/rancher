@@ -270,6 +270,10 @@ func addRoles(wrangler *wrangler.Context, management *config.ManagementContext) 
 		addRule().apiGroups("authentication.istio.io").resources("policies").verbs("get", "list", "watch").
 		addRule().apiGroups("rbac.istio.io").resources("rbacconfigs", "serviceroles", "servicerolebindings").verbs("get", "list", "watch").
 		addRule().apiGroups("security.istio.io").resources("authorizationpolicies").verbs("get", "list", "watch").
+		addRule().apiGroups("security.istio.io").resources("requestauthentications").verbs("get", "list", "watch").
+		addRule().apiGroups("telemetry.istio.io").resources("telemetries").verbs("get", "list", "watch").
+		addRule().apiGroups("gateway.networking.k8s.io").resources("httproutes", "grpcroutes", "tcproutes", "tlsroutes", "udproutes").verbs("get", "list", "watch").
+		addRule().apiGroups("traefik.io").resources("ingressroutes", "ingressroutetcps", "ingressrouteudps", "middlewares", "middlewaretcps", "tlsoptions", "tlsstores", "serverstransports", "serverstransporttcps").verbs("get", "list", "watch").
 		addRule().apiGroups("catalog.cattle.io").resources("operations", "releases", "apps").verbs("get", "list", "watch").
 		// Promoted Rules
 		addRule().apiGroups("ui.cattle.io").resources("navlinks").verbs("get", "list", "watch").
