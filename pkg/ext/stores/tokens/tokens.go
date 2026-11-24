@@ -58,11 +58,13 @@ const (
 	KindLabel            = "authn.management.cattle.io/kind"
 	KindSession          = "session"
 	KindKubeconfig       = "kubeconfig"
+	KindAgent            = "agent"
 	SecretKindLabel      = "cattle.io/kind"
 	SecretKindLabelValue = "token"
 	GeneratePrefix       = "token-"
 
 	// names of the data fields used by the backing secrets to store token information
+	FieldAgent            = "agent"
 	FieldClusterName      = "cluster"
 	FieldDescription      = "description"
 	FieldEnabled          = "enabled"
@@ -640,6 +642,10 @@ func (t *SystemStore) Create(ctx context.Context, group schema.GroupResource, to
 	// check if the user does not wish to actually change anything
 	dryRun := options != nil && len(options.DryRun) > 0 && options.DryRun[0] == metav1.DryRunAll
 
+	if err := ValidateAgent(token.Spec.Kind, token.Spec.Agent); err != nil {
+		return nil, apierrors.NewBadRequest(err.Error())
+	}
+
 	user, err := t.userClient.Get(token.Spec.UserID)
 	if err != nil {
 		return nil, apierrors.NewInternalError(fmt.Errorf("failed to retrieve user %s: %w",
@@ -664,6 +670,12 @@ func (t *SystemStore) Create(ctx context.Context, group schema.GroupResource, to
 	requestToken, err := t.Fetch(authTokenID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Agent tokens are restricted, and a token they create could escape the restriction.
+	if et, ok := requestToken.(*ext.Token); ok && et.Spec.Agent != nil {
+		return nil, apierrors.NewForbidden(GVR.GroupResource(), "",
+			fmt.Errorf("agent tokens can't create tokens"))
 	}
 
 	rtPrincipal := requestToken.GetUserPrincipal()
@@ -1015,6 +1027,10 @@ func (t *SystemStore) update(authTokenID string, fullPermission bool, oldToken, 
 
 	if token.Spec.ClusterName != oldToken.Spec.ClusterName {
 		return nil, apierrors.NewBadRequest("spec.clusterName is immutable")
+	}
+
+	if !reflect.DeepEqual(token.Spec.Agent, oldToken.Spec.Agent) {
+		return nil, apierrors.NewBadRequest("spec.agent is immutable")
 	}
 
 	// Regular users are not allowed to extend the TTL.
@@ -1627,6 +1643,14 @@ func toSecret(token *ext.Token) (*corev1.Secret, error) {
 	// pass back to caller (Create, Update)
 	token.Spec.TTL = ttl
 
+	// Only agent tokens store an agent, so the storage of all other tokens is unchanged.
+	if token.Spec.Agent != nil {
+		agentBytes, err := json.Marshal(token.Spec.Agent)
+		if err != nil {
+			return nil, err
+		}
+		secret.StringData[FieldAgent] = string(agentBytes)
+	}
 	secret.StringData[FieldClusterName] = token.Spec.ClusterName
 	secret.StringData[FieldDescription] = token.Spec.Description
 	secret.StringData[FieldEnabled] = fmt.Sprintf("%t", token.Spec.Enabled == nil || *token.Spec.Enabled)
@@ -1694,6 +1718,12 @@ func fromSecret(secret *corev1.Secret) (*ext.Token, error) {
 	token.Spec.ClusterName = string(secret.Data[FieldClusterName])
 	token.Spec.Description = string(secret.Data[FieldDescription])
 	token.Spec.Kind = string(secret.Data[FieldKind])
+	if agentData := secret.Data[FieldAgent]; len(agentData) > 0 {
+		token.Spec.Agent = &ext.TokenAgent{}
+		if err := json.Unmarshal(agentData, token.Spec.Agent); err != nil {
+			return nil, fmt.Errorf("invalid agent: %w", err)
+		}
+	}
 
 	enabled, err := strconv.ParseBool(string(secret.Data[FieldEnabled]))
 	if err != nil {
@@ -1791,6 +1821,14 @@ func TTLLimits(kind string) (defaultTTL, maxTTL int64, err error) {
 		if err == nil {
 			maxTTL, err = parseMaxTTL(settings.AuthTokenMaxTTLMinutes)
 			maxTTL = ClampToMaxTTL(kubeconfigMax, maxTTL)
+		}
+	case KindAgent:
+		defaultSetting = settings.AgentTokenDefaultTTLMinutes
+		var agentMax int64
+		agentMax, err = parseMaxTTL(settings.AgentTokenMaxTTLMinutes)
+		if err == nil {
+			maxTTL, err = parseMaxTTL(settings.AuthTokenMaxTTLMinutes)
+			maxTTL = ClampToMaxTTL(agentMax, maxTTL)
 		}
 	default:
 		defaultSetting = settings.AuthTokenDefaultTTLMinutes

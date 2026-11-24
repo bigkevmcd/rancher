@@ -185,6 +185,16 @@ func (a *tokenAuthenticator) Authenticate(req *http.Request) (*AuthenticatorResp
 		return nil, errors.Wrapf(ErrMustAuthenticate, "clusterID does not match")
 	}
 
+	// Agent tokens are limited to what their rules allow. This is the one place all request
+	// paths pass through, so the check is made here and, being an authentication error, fails
+	// closed everywhere. A token of kind agent without an agent is malformed and denied.
+	if extToken, ok := token.(*ext.Token); ok && (extToken.Spec.Kind == exttokenstore.KindAgent || extToken.Spec.Agent != nil) {
+		if err := agentScopeCheck(req, extToken.Spec.Agent); err != nil {
+			logrus.Debugf("auth: agent token %s denied for %s %s: %v", extToken.Name, req.Method, req.URL.Path, err)
+			return nil, errors.Wrapf(ErrMustAuthenticate, "%v", err)
+		}
+	}
+
 	authUser, err := a.userLister.Get("", token.GetUserID())
 	if err != nil {
 		return nil, errors.Wrapf(ErrMustAuthenticate,
@@ -340,6 +350,9 @@ func sessionIdentity(token accessor.TokenAccessor, user *apiv3.User) audit.Ident
 		if identity.Username == "" {
 			identity.Username = user.Username
 		}
+	}
+	if extToken, ok := token.(*ext.Token); ok && extToken.Spec.Agent != nil {
+		identity.Agent = extToken.Spec.Agent.Name
 	}
 	return identity
 }

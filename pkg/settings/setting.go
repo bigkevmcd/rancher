@@ -187,6 +187,16 @@ var (
 	// updated.
 	AuthTokenMaxTTLMinutes = NewSetting("auth-token-max-ttl-minutes", "129600") // 90 days
 
+	// AgentTokenDefaultTTLMinutes is the default time to live for agent tokens (ext tokens of kind
+	// "agent"). 0 means the max. A default above the max is capped to the max. The default applies
+	// when a token is created or updated without a TTL.
+	AgentTokenDefaultTTLMinutes = NewSetting("agent-token-default-ttl-minutes", "60") // 1 hour
+
+	// AgentTokenMaxTTLMinutes is the max time to live for agent tokens. It can't raise the limit
+	// set by AuthTokenMaxTTLMinutes: agent tokens get the smaller of the two, where 0 is no limit.
+	// The limit applies when a token is created or updated.
+	AgentTokenMaxTTLMinutes = NewSetting("agent-token-max-ttl-minutes", "1440") // 1 day
+
 	// AuthTokenDefaultTTLMinutes is the default time to live for tokens other than login session and
 	// kubeconfig tokens. 0 means the max. A default above the max is capped to the max. The default
 	// applies when a token is created or updated without a TTL.

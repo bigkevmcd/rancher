@@ -48,6 +48,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		v1.SelfUserList{}.OpenAPIModelName():                                             schema_pkg_apis_extcattleio_v1_SelfUserList(ref),
 		v1.SelfUserStatus{}.OpenAPIModelName():                                           schema_pkg_apis_extcattleio_v1_SelfUserStatus(ref),
 		v1.Token{}.OpenAPIModelName():                                                    schema_pkg_apis_extcattleio_v1_Token(ref),
+		v1.TokenAgent{}.OpenAPIModelName():                                               schema_pkg_apis_extcattleio_v1_TokenAgent(ref),
+		v1.TokenAgentRule{}.OpenAPIModelName():                                           schema_pkg_apis_extcattleio_v1_TokenAgentRule(ref),
 		v1.TokenList{}.OpenAPIModelName():                                                schema_pkg_apis_extcattleio_v1_TokenList(ref),
 		v1.TokenPrincipal{}.OpenAPIModelName():                                           schema_pkg_apis_extcattleio_v1_TokenPrincipal(ref),
 		v1.TokenSpec{}.OpenAPIModelName():                                                schema_pkg_apis_extcattleio_v1_TokenSpec(ref),
@@ -836,6 +838,99 @@ func schema_pkg_apis_extcattleio_v1_Token(ref common.ReferenceCallback) common.O
 	}
 }
 
+func schema_pkg_apis_extcattleio_v1_TokenAgent(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TokenAgent identifies an agent and limits the token's authority.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name identifies the agent in audit records. It must be a valid DNS label.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"rules": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rules limit what the token may do. A request is allowed only if one of the rules allows it and the owning user's own permissions allow it, i.e. the effective permissions are the intersection of the two, never more than the owner has. At least one rule is required. A request which cannot be described as a Kubernetes-style resource request is denied.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(v1.TokenAgentRule{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"name", "rules"},
+			},
+		},
+		Dependencies: []string{
+			v1.TokenAgentRule{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_extcattleio_v1_TokenAgentRule(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TokenAgentRule is a restricted form of an RBAC policy rule. Resource names and non-resource URLs are not supported.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"verbs": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Verbs is the list of allowed verbs, e.g. get, list, watch, create, update, patch, delete. \"*\" matches all verbs.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"apiGroups": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIGroups is the list of API groups of the allowed resources. The empty string is the core group. \"*\" matches all groups.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Resources is the list of allowed resources, optionally with a subresource such as \"pods/log\". \"*\" matches all resources.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"verbs", "apiGroups", "resources"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_extcattleio_v1_TokenList(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1035,12 +1130,18 @@ func schema_pkg_apis_extcattleio_v1_TokenSpec(ref common.ReferenceCallback) comm
 							Format:      "",
 						},
 					},
+					"agent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Agent marks the token as belonging to an AI agent acting for the owning user, and restricts what it may do. It is required for tokens of kind \"agent\" and rejected for all other kinds. It is immutable.",
+							Ref:         ref(v1.TokenAgent{}.OpenAPIModelName()),
+						},
+					},
 				},
 				Required: []string{"userPrincipal"},
 			},
 		},
 		Dependencies: []string{
-			v1.TokenPrincipal{}.OpenAPIModelName()},
+			v1.TokenAgent{}.OpenAPIModelName(), v1.TokenPrincipal{}.OpenAPIModelName()},
 	}
 }
 

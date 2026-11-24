@@ -103,6 +103,37 @@ type TokenSpec struct {
 	// An empty string indicates that the token is not scoped to a specific cluster.
 	// +optional
 	ClusterName string `json:"clusterName,omitempty"`
+	// Agent marks the token as belonging to an AI agent acting for the owning
+	// user, and restricts what it may do. It is required for tokens of kind
+	// "agent" and rejected for all other kinds. It is immutable.
+	// +optional
+	Agent *TokenAgent `json:"agent,omitempty"`
+}
+
+// TokenAgent identifies an agent and limits the token's authority.
+type TokenAgent struct {
+	// Name identifies the agent in audit records. It must be a valid DNS label.
+	Name string `json:"name"`
+	// Rules limit what the token may do. A request is allowed only if one of the
+	// rules allows it and the owning user's own permissions allow it, i.e. the
+	// effective permissions are the intersection of the two, never more than the
+	// owner has. At least one rule is required. A request which cannot be
+	// described as a Kubernetes-style resource request is denied.
+	Rules []TokenAgentRule `json:"rules"`
+}
+
+// TokenAgentRule is a restricted form of an RBAC policy rule. Resource names and
+// non-resource URLs are not supported.
+type TokenAgentRule struct {
+	// Verbs is the list of allowed verbs, e.g. get, list, watch, create, update,
+	// patch, delete. "*" matches all verbs.
+	Verbs []string `json:"verbs"`
+	// APIGroups is the list of API groups of the allowed resources. The empty
+	// string is the core group. "*" matches all groups.
+	APIGroups []string `json:"apiGroups"`
+	// Resources is the list of allowed resources, optionally with a
+	// subresource such as "pods/log". "*" matches all resources.
+	Resources []string `json:"resources"`
 }
 
 // TokenPrincipal contains the data about the user principal owning the token.

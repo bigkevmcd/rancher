@@ -77,9 +77,19 @@ func (h *tokenHandler) extTokenHash(name string) (string, error) {
 	return hash, nil
 }
 
+// skipAgentToken reports whether the token is an agent token. Those are never synced downstream:
+// a ClusterAuthToken is verified by the downstream cluster alone, so Rancher couldn't apply the
+// token's rules, and the token would have the full permissions of its owner there.
+func skipAgentToken(token *extv1.Token) bool {
+	return token.Spec.Kind == "agent" || token.Spec.Agent != nil
+}
+
 // extCreate is called when a given ext token is created, and is responsible for
 // updating/creating the ClusterAuthToken in the downstream cluster.
 func (h *tokenHandler) extCreate(token *extv1.Token) (*extv1.Token, error) {
+	if skipAgentToken(token) {
+		return token, generic.ErrSkip
+	}
 	if err := validateToken(token.GetName(), token.Spec.UserID); err != nil {
 		return token, err
 	}
@@ -117,6 +127,9 @@ func (h *tokenHandler) extCreate(token *extv1.Token) (*extv1.Token, error) {
 // ExtUpdated is called when a given ext token is modified, and is responsible
 // for updating/creating the ClusterAuthToken in a downstream cluster.
 func (h *tokenHandler) ExtUpdated(token *extv1.Token) (*extv1.Token, error) {
+	if skipAgentToken(token) {
+		return token, generic.ErrSkip
+	}
 	if err := validateToken(token.GetName(), token.Spec.UserID); err != nil {
 		return token, err
 	}

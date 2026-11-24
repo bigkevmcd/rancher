@@ -55,6 +55,10 @@ type Identity struct {
 
 	// PrincipalID is the ID of the provider's principal for the user, such as "github_user://12345".
 	PrincipalID string `json:"principalId,omitempty"`
+
+	// Agent is the name of the AI agent, when the request was made with an agent token. The other
+	// fields then describe the user the agent acts for.
+	Agent string `json:"agent,omitempty"`
 }
 
 // IsZero returns whether the identity holds no information.

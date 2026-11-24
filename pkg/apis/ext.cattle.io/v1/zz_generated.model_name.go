@@ -102,6 +102,16 @@ func (in Token) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in TokenAgent) OpenAPIModelName() string {
+	return "ext.cattle.io.v1.TokenAgent"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in TokenAgentRule) OpenAPIModelName() string {
+	return "ext.cattle.io.v1.TokenAgentRule"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in TokenList) OpenAPIModelName() string {
 	return "ext.cattle.io.v1.TokenList"
 }
