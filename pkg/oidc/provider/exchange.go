@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/rancher/rancher/pkg/auth/audit"
 	"io"
 	"net/http"
 	"net/url"
@@ -161,7 +162,11 @@ func (h *exchangeHandler) exchange(r *http.Request) (*exchangeResponse, *oidcerr
 			continue
 		}
 
-		return h.issue(trust, idToken.Subject)
+		resp, oidcErr := h.issue(trust, idToken.Subject)
+		if oidcErr == nil {
+			audit.SetUserID(r.Context(), trust.Spec.UserID)
+		}
+		return resp, oidcErr
 	}
 
 	// The reason is deliberately not revealed: which issuers, audiences and subjects are trusted is

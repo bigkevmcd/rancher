@@ -233,3 +233,24 @@ func FromContext(ctx context.Context) (*User, bool) {
 	u, ok := ctx.Value(userKeyValue).(*User)
 	return u, ok
 }
+
+// Anonymous makes the request user "system:unauthenticated" when it has none, so that the audit
+// middleware can wrap handlers that do not run Rancher's authenticator, such as the OIDC provider.
+// Such handlers name the user they authenticated themselves with [SetUserID].
+func Anonymous(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := request.UserFrom(r.Context()); !ok {
+			info := &user.DefaultInfo{Name: user.Anonymous, Groups: []string{user.AllUnauthenticated}}
+			r = r.WithContext(request.WithUser(r.Context(), info))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SetUserID records userID as the user of the request in the audit entry, for handlers that
+// authenticate the request themselves. It does nothing if audit logging is disabled.
+func SetUserID(ctx context.Context, userID string) {
+	if u, ok := FromContext(ctx); ok && userID != "" {
+		u.SetIdentity(&user.DefaultInfo{Name: userID})
+	}
+}

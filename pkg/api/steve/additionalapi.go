@@ -10,6 +10,7 @@ import (
 	"github.com/rancher/rancher/pkg/api/steve/health"
 	"github.com/rancher/rancher/pkg/api/steve/projects"
 	"github.com/rancher/rancher/pkg/api/steve/proxy"
+	"github.com/rancher/rancher/pkg/auth/audit"
 	"github.com/rancher/rancher/pkg/capr/configserver"
 	"github.com/rancher/rancher/pkg/capr/installer"
 	exttokenstore "github.com/rancher/rancher/pkg/ext/stores/tokens"
@@ -46,7 +47,7 @@ func AdditionalAPIsPreMCM(config *wrangler.Context) func(http.Handler) http.Hand
 	}
 }
 
-func AdditionalAPIs(ctx context.Context, config *wrangler.Context, steve *steve.Server) (func(http.Handler) http.Handler, error) {
+func AdditionalAPIs(ctx context.Context, config *wrangler.Context, steve *steve.Server, auditLog func(http.Handler) http.Handler) (func(http.Handler) http.Handler, error) {
 	clusterAPI, err := projects.Projects(ctx, config, steve)
 	if err != nil {
 		return nil, err
@@ -79,7 +80,10 @@ func AdditionalAPIs(ctx context.Context, config *wrangler.Context, steve *steve.
 		if err != nil {
 			return nil, err
 		}
-		p.RegisterOIDCProviderHandles(mux)
+		// The mux is not behind Steve's authentication, which is where audit logging happens.
+		oidcMux := http.NewServeMux()
+		p.RegisterOIDCProviderHandles(oidcMux)
+		mux.Handle("/oidc/", audit.Anonymous(auditLog(oidcMux)))
 	}
 
 	var nextHandler http.Handler

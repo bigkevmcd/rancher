@@ -324,11 +324,6 @@ func New(ctx context.Context, clientConfg clientcmd.ClientConfig, opts *Options)
 	}
 
 	additionalAPIPreMCM := steveapi.AdditionalAPIsPreMCM(wranglerContext)
-	additionalAPI, err := steveapi.AdditionalAPIs(ctx, wranglerContext, steve)
-	if err != nil {
-		return nil, err
-	}
-
 	auditLogMiddleware := func(next http.Handler) http.Handler {
 		return next
 	}
@@ -368,6 +363,11 @@ func New(ctx context.Context, clientConfg clientcmd.ClientConfig, opts *Options)
 				}
 				return u.Username, u.DisplayName, true
 			}))
+	}
+
+	additionalAPI, err := steveapi.AdditionalAPIs(ctx, wranglerContext, steve, auditLogMiddleware)
+	if err != nil {
+		return nil, err
 	}
 
 	aggregationMiddleware := aggregation.NewMiddleware(ctx, wranglerContext.Mgmt.APIService(), wranglerContext.TunnelServer)

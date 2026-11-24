@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rancher/rancher/pkg/auth/audit"
 	"mime"
 	"net/http"
 	"slices"
@@ -186,6 +187,7 @@ func (h *cibaHandler) createRequest(r *http.Request, client *v3.OIDCClient) (*au
 		return nil, oidcerror.New(oidcerror.ServerError, "failed to look up the user")
 	}
 
+	audit.SetUserID(r.Context(), userID)
 	if oidcErr := h.checkCaps(client.Status.ClientID, userID); oidcErr != nil {
 		return nil, oidcErr
 	}
@@ -393,6 +395,9 @@ func (h *cibaHandler) poll(r *http.Request, client *v3.OIDCClient) (*cibaTokenRe
 			resp, oidcErr, retry := h.issue(req)
 			if retry {
 				continue
+			}
+			if resp != nil {
+				audit.SetUserID(r.Context(), req.UserID)
 			}
 			return resp, oidcErr
 
@@ -604,6 +609,7 @@ func (h *cibaHandler) authenticateUser(w http.ResponseWriter, r *http.Request) (
 		oidcerror.WriteError(oidcerror.InvalidRequest, "must authenticate", http.StatusUnauthorized, w)
 		return "", false
 	}
+	audit.SetUserID(r.Context(), token.GetUserID())
 	return token.GetUserID(), true
 }
 

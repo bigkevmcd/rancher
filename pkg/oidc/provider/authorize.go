@@ -3,6 +3,7 @@ package provider
 import (
 	"crypto/subtle"
 	"fmt"
+	"github.com/rancher/rancher/pkg/auth/audit"
 	"net/http"
 	"net/url"
 	"slices"
@@ -241,6 +242,7 @@ func (h *authorizeHandler) getAndVerifyRancherTokenFromRequest(r *http.Request) 
 		return nil, fmt.Errorf("token can't be used to log in to OIDC clients")
 	}
 
+	audit.SetUserID(r.Context(), token.GetUserID())
 	return token, nil
 }
 

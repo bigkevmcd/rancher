@@ -22,6 +22,8 @@ var (
 	sensitiveBodyFields = []string{
 		"credentials", "applicationSecret", "oauthCredential", "serviceAccountCredential", "spKey", "spCert", "certificate", "privateKey", "secretsEncryptionConfig", "manifestUrl",
 		"insecureWindowsNodeCommand", "insecureNodeCommand", "insecureCommand", "command", "nodeCommand", "windowsNodeCommand", "clientRandom",
+		// OIDC provider: the backchannel request ID is a credential until the request is decided.
+		"auth_req_id", "client_secret",
 	}
 )
 
