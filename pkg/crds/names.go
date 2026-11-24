@@ -30,6 +30,7 @@ func RequiredCRDs() []string {
 	}
 	if features.OIDCProvider.Enabled() {
 		requiredCRDS = append(requiredCRDS, OIDCClientCRD()...)
+		requiredCRDS = append(requiredCRDS, AgentTrustCRD()...)
 	}
 	if features.ImportedDay2Ops.Enabled() {
 		requiredCRDS = append(requiredCRDS, PlanCRDs()...)
@@ -187,6 +188,13 @@ func UIPluginsCRD() []string {
 	}
 }
 
+// AgentTrustCRD returns a list of CRD names needed to trust the workload identities of agents
+func AgentTrustCRD() []string {
+	return []string{
+		"agenttrusts.management.cattle.io",
+	}
+}
+
 // OIDCClientCRD returns a list of CRD names needed to enable the OIDC provider
 func OIDCClientCRD() []string {
 	return []string{
@@ -218,6 +226,7 @@ func OperationCRDs() []string {
 
 // MigratedResources map list of resource that have been migrated after all resource have a CRD this can be removed.
 var MigratedResources = map[string]bool{
+	"agenttrusts.management.cattle.io":                                true,
 	"activedirectoryproviders.management.cattle.io":                   false,
 	"apiservices.management.cattle.io":                                false,
 	"apps.catalog.cattle.io":                                          false,

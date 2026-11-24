@@ -30,6 +30,7 @@ import (
 var (
 	APIServiceResourceName                                = "apiservices"
 	ActiveDirectoryProviderResourceName                   = "activedirectoryproviders"
+	AgentTrustResourceName                                = "agenttrusts"
 	AuthConfigResourceName                                = "authconfigs"
 	AuthProviderResourceName                              = "authproviders"
 	AuthTokenResourceName                                 = "authtokens"
@@ -103,6 +104,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&APIServiceList{},
 		&ActiveDirectoryProvider{},
 		&ActiveDirectoryProviderList{},
+		&AgentTrust{},
+		&AgentTrustList{},
 		&AuthConfig{},
 		&AuthConfigList{},
 		&AuthProvider{},

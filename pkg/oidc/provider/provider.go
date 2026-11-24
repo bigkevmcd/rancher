@@ -49,7 +49,7 @@ func OIDCClientIDIndexFunc(obj interface{}) ([]string, error) {
 	return []string{o.Status.ClientID}, nil
 }
 
-func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, tokenCache wrangmgmtv3.TokenCache, tokenClient wrangmgmtv3.TokenClient, userLister wrangmgmtv3.UserCache, userAttributeLister wrangmgmtv3.UserAttributeCache, secretCache corecontrollers.SecretCache, secretClient corecontrollers.SecretClient, oidcClientCache wrangmgmtv3.OIDCClientCache, oidcClientController wrangmgmtv3.OIDCClientController, namespaceClient corecontrollers.NamespaceClient) (Provider, error) {
+func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, tokenCache wrangmgmtv3.TokenCache, tokenClient wrangmgmtv3.TokenClient, userLister wrangmgmtv3.UserCache, userAttributeLister wrangmgmtv3.UserAttributeCache, secretCache corecontrollers.SecretCache, secretClient corecontrollers.SecretClient, oidcClientCache wrangmgmtv3.OIDCClientCache, oidcClientController wrangmgmtv3.OIDCClientController, namespaceClient corecontrollers.NamespaceClient, agentTrustCache wrangmgmtv3.AgentTrustCache) (Provider, error) {
 	sessionStorage := session.NewSecretSessionStore(ctx, secretCache, secretClient, maxTime)
 	jwks, err := newJWKSHandler(secretCache, secretClient)
 	if err != nil {
@@ -73,10 +73,13 @@ func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, 
 		return Provider{}, err
 	}
 
+	tokenHandler := newTokenHandler(extTokenStore, tokenCache, userLister, userAttributeLister, sessionStorage, jwks, oidcClientCache, oidcClientController, secretCache, tokenClient)
+	tokenHandler.exchange = newExchangeHandler(ctx, agentTrustCache, extTokenStore)
+
 	return Provider{
 		jwksHandler:     jwks,
 		authHandler:     newAuthorizeHandler(extTokenStore, userLister, sessionStorage, &randomstring.Generator{}, oidcClientCache),
-		tokenHandler:    newTokenHandler(extTokenStore, tokenCache, userLister, userAttributeLister, sessionStorage, jwks, oidcClientCache, oidcClientController, secretCache, tokenClient),
+		tokenHandler:    tokenHandler,
 		userInfoHandler: newUserInfoHandler(userLister, userAttributeLister, jwks, extTokenStore),
 	}, nil
 }

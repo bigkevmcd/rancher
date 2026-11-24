@@ -60,6 +60,23 @@ func NewActiveDirectoryProvider(namespace, name string, obj ActiveDirectoryProvi
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// AgentTrustList is a list of AgentTrust resources
+type AgentTrustList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []AgentTrust `json:"items"`
+}
+
+func NewAgentTrust(namespace, name string, obj AgentTrust) *AgentTrust {
+	obj.APIVersion, obj.Kind = SchemeGroupVersion.WithKind("AgentTrust").ToAPIVersionAndKind()
+	obj.Name = name
+	obj.Namespace = namespace
+	return &obj
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 // AuthConfigList is a list of AuthConfig resources
 type AuthConfigList struct {
 	metav1.TypeMeta `json:",inline"`

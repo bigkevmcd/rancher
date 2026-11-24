@@ -75,7 +75,7 @@ func AdditionalAPIs(ctx context.Context, config *wrangler.Context, steve *steve.
 			config.Mgmt.User().Cache(), config.Mgmt.UserAttribute().Cache(),
 			config.Core.Secret().Cache(), config.Core.Secret(),
 			config.Mgmt.OIDCClient().Cache(), config.Mgmt.OIDCClient(),
-			config.Core.Namespace())
+			config.Core.Namespace(), config.Mgmt.AgentTrust().Cache())
 		if err != nil {
 			return nil, err
 		}

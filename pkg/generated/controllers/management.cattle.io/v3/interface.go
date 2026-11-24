@@ -33,6 +33,7 @@ func init() {
 type Interface interface {
 	APIService() APIServiceController
 	ActiveDirectoryProvider() ActiveDirectoryProviderController
+	AgentTrust() AgentTrustController
 	AuthConfig() AuthConfigController
 	AuthProvider() AuthProviderController
 	AuthToken() AuthTokenController
@@ -97,6 +98,10 @@ func (v *version) APIService() APIServiceController {
 
 func (v *version) ActiveDirectoryProvider() ActiveDirectoryProviderController {
 	return generic.NewNonNamespacedController[*v3.ActiveDirectoryProvider, *v3.ActiveDirectoryProviderList](schema.GroupVersionKind{Group: "management.cattle.io", Version: "v3", Kind: "ActiveDirectoryProvider"}, "activedirectoryproviders", v.controllerFactory)
+}
+
+func (v *version) AgentTrust() AgentTrustController {
+	return generic.NewNonNamespacedController[*v3.AgentTrust, *v3.AgentTrustList](schema.GroupVersionKind{Group: "management.cattle.io", Version: "v3", Kind: "AgentTrust"}, "agenttrusts", v.controllerFactory)
 }
 
 func (v *version) AuthConfig() AuthConfigController {

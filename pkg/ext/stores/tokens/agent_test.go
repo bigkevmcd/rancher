@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 )
 
@@ -280,6 +281,104 @@ func TestSystemStoreCreateRejectsInvalidAgent(t *testing.T) {
 			_, err := store.Create(t.Context(), GVR.GroupResource(), token, &metav1.CreateOptions{}, &mockUser{name: "world"})
 			require.Error(t, err)
 			assert.True(t, apierrors.IsBadRequest(err), "expected bad request, got %v", err)
+		})
+	}
+}
+
+func TestSystemStoreCreateAgentToken(t *testing.T) {
+	const day = int64(24 * time.Hour / time.Millisecond)
+
+	newStore := func(t *testing.T, user *v3.User, created *corev1.Secret) *SystemStore {
+		setTTLSettings(t, "129600", "129600", "960")
+		ctrl := gomock.NewController(t)
+
+		secrets := fake.NewMockControllerInterface[*corev1.Secret, *corev1.SecretList](ctrl)
+		secrets.EXPECT().Cache().Return(fake.NewMockCacheInterface[*corev1.Secret](ctrl))
+		secrets.EXPECT().Create(gomock.Any()).DoAndReturn(func(s *corev1.Secret) (*corev1.Secret, error) {
+			s = s.DeepCopy()
+			s.Name = "token-abcde"
+			s.Data = map[string][]byte{}
+			for k, v := range s.StringData {
+				s.Data[k] = []byte(v)
+			}
+			*created = *s
+			return s, nil
+		}).AnyTimes()
+
+		users := fake.NewMockNonNamespacedControllerInterface[*v3.User, *v3.UserList](ctrl)
+		ucache := fake.NewMockNonNamespacedCacheInterface[*v3.User](ctrl)
+		users.EXPECT().Cache().Return(ucache)
+		ucache.EXPECT().Get("u-1").DoAndReturn(func(string) (*v3.User, error) {
+			if user == nil {
+				return nil, apierrors.NewNotFound(schema.GroupResource{}, "u-1")
+			}
+			return user, nil
+		}).AnyTimes()
+
+		nsCache := fake.NewMockNonNamespacedCacheInterface[*corev1.Namespace](ctrl)
+		nsCache.EXPECT().Get(TokenNamespace).Return(&corev1.Namespace{}, nil).AnyTimes()
+
+		timer := NewMocktimeHandler(ctrl)
+		timer.EXPECT().Now().Return("2026-11-24T00:00:00Z").AnyTimes()
+		hasher := NewMockhashHandler(ctrl)
+		hasher.EXPECT().MakeAndHashSecret().Return("the-secret", "the-hash", nil).AnyTimes()
+
+		return NewSystem(nil, nsCache, secrets, users,
+			fake.NewMockNonNamespacedCacheInterface[*v3.Token](ctrl),
+			fake.NewMockNonNamespacedCacheInterface[*v3.Cluster](ctrl),
+			timer, hasher, NewMockauthHandler(ctrl))
+	}
+
+	t.Run("creates a token owned by the user's local principal", func(t *testing.T) {
+		var created corev1.Secret
+		store := newStore(t, &v3.User{Username: "alice", DisplayName: "Alice"}, &created)
+
+		token, err := store.CreateAgentToken(AgentTokenRequest{
+			UserID:      "u-1",
+			Agent:       *validAgent(),
+			TTL:         30 * day,
+			Description: "from a trust",
+			Labels:      map[string]string{"cattle.io/agent-trust": "ci"},
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, "ext/token-abcde:the-secret", token.Status.BearerToken)
+		assert.Equal(t, "the-secret", token.Status.Value)
+		assert.Empty(t, token.Status.Hash)
+		assert.Equal(t, KindAgent, token.Spec.Kind)
+		assert.Equal(t, "u-1", token.Spec.UserID)
+		assert.Equal(t, validAgent(), token.Spec.Agent)
+		assert.Equal(t, "local://u-1", token.Spec.UserPrincipal.Name)
+		assert.Equal(t, "local", token.Spec.UserPrincipal.Provider)
+		assert.Equal(t, "alice", token.Spec.UserPrincipal.LoginName)
+		assert.Equal(t, "ci", token.Labels["cattle.io/agent-trust"])
+		// 30 days requested, the agent max applies.
+		assert.Equal(t, day, token.Spec.TTL)
+		assert.Equal(t, KindAgent, created.Labels[KindLabel])
+	})
+
+	for name, test := range map[string]struct {
+		user    *v3.User
+		mutate  func(r *AgentTokenRequest)
+		wantErr func(error) bool
+	}{
+		"unknown user":  {user: nil, wantErr: apierrors.IsBadRequest},
+		"disabled user": {user: &v3.User{Enabled: ptr.To(false)}, wantErr: apierrors.IsBadRequest},
+		"system user":   {user: &v3.User{PrincipalIDs: []string{"system://provisioning"}}, wantErr: apierrors.IsBadRequest},
+		"invalid agent": {user: &v3.User{}, wantErr: apierrors.IsBadRequest,
+			mutate: func(r *AgentTokenRequest) { r.Agent.Rules = nil }},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			var created corev1.Secret
+			store := newStore(t, test.user, &created)
+			req := AgentTokenRequest{UserID: "u-1", Agent: *validAgent()}
+			if test.mutate != nil {
+				test.mutate(&req)
+			}
+			_, err := store.CreateAgentToken(req)
+			require.Error(t, err)
+			assert.True(t, test.wantErr(err), "unexpected error %v", err)
+			assert.Empty(t, created.Name, "no secret may be created")
 		})
 	}
 }

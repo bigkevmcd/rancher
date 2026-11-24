@@ -55,6 +55,9 @@ type tokenHandler struct {
 	secretCache         corev1.SecretCache
 	jwks                signingKeyGetter
 	now                 func() time.Time
+
+	// exchange serves the token exchange grant. It is optional, without it the grant is unsupported.
+	exchange *exchangeHandler
 }
 
 // TokenResponse represents a successful response returned by the token endpoint
@@ -146,6 +149,12 @@ func (h *tokenHandler) tokenEndpoint(w http.ResponseWriter, r *http.Request) {
 			oidcerror.WriteError(oidcerror.ServerError, "failed to encode refresh token response", http.StatusInternalServerError, w)
 			return
 		}
+	case grantTypeTokenExchange:
+		if h.exchange == nil {
+			oidcerror.WriteError(oidcerror.UnsupportedGrantType, "grant_type not supported", http.StatusBadRequest, w)
+			return
+		}
+		h.exchange.handle(w, r)
 	default:
 		http.Error(w, "grant_type not supported", http.StatusInternalServerError)
 		return

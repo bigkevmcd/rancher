@@ -29,7 +29,7 @@ type OpenIDConfiguration struct {
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// ScopesSupported can be openid, profile, offline_token
 	ScopesSupported []string `json:"scopes_supported"`
-	// GrantTypesSupported only code is supported
+	// GrantTypesSupported the grants the token endpoint serves
 	GrantTypesSupported []string `json:"grant_types_supported"`
 }
 
@@ -45,7 +45,7 @@ func openIDConfigurationEndpoint(w http.ResponseWriter, r *http.Request) {
 		IDTokenSigningAlgsValuesSupported: []string{"RS256"},
 		CodeChallengeMethodsSupported:     []string{"S256"},
 		ScopesSupported:                   []string{"openid", "profile", "offline_access"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token", grantTypeTokenExchange},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

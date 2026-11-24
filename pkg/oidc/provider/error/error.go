@@ -16,6 +16,18 @@ const (
 	UnsupportedResponseType = "unsupported_response_type"
 	// InvalidScope the requested scope is invalid, unknown, or malformed
 	InvalidScope = "invalid_scope"
+	// InvalidGrant the provided grant, such as a subject token, is invalid, expired, revoked, or does not match the client.
+	InvalidGrant = "invalid_grant"
+	// UnsupportedGrantType the authorization grant type is not supported by the authorization server.
+	UnsupportedGrantType = "unsupported_grant_type"
+	// InvalidClient client authentication failed.
+	InvalidClient = "invalid_client"
+	// AuthorizationPending is returned while the user has not yet approved a backchannel authentication request.
+	AuthorizationPending = "authorization_pending"
+	// SlowDown is returned when the client polls the token endpoint more often than allowed.
+	SlowDown = "slow_down"
+	// ExpiredToken is returned when a backchannel authentication request has expired.
+	ExpiredToken = "expired_token"
 	// ServerError the authorization server encountered an unexpected condition that prevented it from fulfilling the request.
 	ServerError = "server_error"
 )

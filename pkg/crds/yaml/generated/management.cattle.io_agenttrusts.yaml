@@ -1,0 +1,150 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: agenttrusts.management.cattle.io
+spec:
+  group: management.cattle.io
+  names:
+    kind: AgentTrust
+    listKind: AgentTrustList
+    plural: agenttrusts
+    singular: agenttrust
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.issuer
+      name: Issuer
+      type: string
+    - jsonPath: .spec.userID
+      name: User
+      type: string
+    name: v3
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AgentTrust makes Rancher trust identity tokens issued by an OIDC issuer for the workloads of AI
+          agents. A workload which presents such a token, to the token exchange grant of the OIDC provider,
+          receives a short-lived agent token for the user of the trust, limited by the rules of the trust.
+          This replaces long-lived API keys in the agent.
+
+          Creating an AgentTrust grants access to the user it names, so it should be limited to
+          administrators, as is the default for cluster-scoped resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec is the desired configuration of the trust.
+            properties:
+              agentName:
+                description: |-
+                  AgentName identifies the agent in audit records. It defaults to the name of the trust and must
+                  be a valid DNS label.
+                type: string
+              audience:
+                description: |-
+                  Audience is the audience identity tokens must be issued for. Tokens for other audiences are
+                  rejected, so that a token issued for another service can't be replayed to Rancher.
+                minLength: 1
+                type: string
+              description:
+                description: Description provides additional context about the trust.
+                type: string
+              issuer:
+                description: |-
+                  Issuer is the URL of the OIDC issuer of the identity tokens. It must use https and serve
+                  OIDC discovery, from which the signing keys are fetched.
+                pattern: ^https://.+
+                type: string
+              maxTTLSeconds:
+                default: 3600
+                description: |-
+                  MaxTTLSeconds is the lifetime of the agent tokens issued. It is limited by the
+                  agent-token-max-ttl-minutes setting.
+                format: int64
+                minimum: 1
+                type: integer
+              rules:
+                description: |-
+                  Rules limit what the agent tokens may do, see AgentRule. The effective permissions are the
+                  intersection of the rules and the permissions of the user.
+                items:
+                  description: |-
+                    AgentRule is a restricted form of an RBAC policy rule, which limits what an agent may do. Resource
+                    names and non-resource URLs are not supported.
+                  properties:
+                    apiGroups:
+                      description: |-
+                        APIGroups is the list of API groups of the allowed resources. The empty string is the core
+                        group. "*" matches all groups.
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    resources:
+                      description: |-
+                        Resources is the list of allowed resources, optionally with a subresource such as "pods/log".
+                        "*" matches all resources.
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    verbs:
+                      description: |-
+                        Verbs is the list of allowed verbs, e.g. get, list, watch, create, update, patch, delete.
+                        "*" matches all verbs.
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - apiGroups
+                  - resources
+                  - verbs
+                  type: object
+                minItems: 1
+                type: array
+              subjects:
+                description: |-
+                  Subjects lists the subjects (the "sub" claim) of the workloads which are trusted. There are
+                  no wildcards: every trusted subject is named.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              userID:
+                description: |-
+                  UserID is the name of the Rancher user the agent acts for. Its permissions are the most the
+                  agent can have.
+                minLength: 1
+                type: string
+            required:
+            - audience
+            - issuer
+            - rules
+            - subjects
+            - userID
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}
