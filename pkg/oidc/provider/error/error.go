@@ -28,6 +28,10 @@ const (
 	SlowDown = "slow_down"
 	// ExpiredToken is returned when a backchannel authentication request has expired.
 	ExpiredToken = "expired_token"
+	// UnauthorizedClient the client is not allowed to use the method, e.g. it is not configured for backchannel authentication.
+	UnauthorizedClient = "unauthorized_client"
+	// InvalidBindingMessage the binding message of a backchannel authentication request is invalid.
+	InvalidBindingMessage = "invalid_binding_message"
 	// ServerError the authorization server encountered an unexpected condition that prevented it from fulfilling the request.
 	ServerError = "server_error"
 )

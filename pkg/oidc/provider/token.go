@@ -58,6 +58,8 @@ type tokenHandler struct {
 
 	// exchange serves the token exchange grant. It is optional, without it the grant is unsupported.
 	exchange *exchangeHandler
+	// ciba serves the backchannel authentication grant. It is optional, without it the grant is unsupported.
+	ciba *cibaHandler
 }
 
 // TokenResponse represents a successful response returned by the token endpoint
@@ -155,6 +157,12 @@ func (h *tokenHandler) tokenEndpoint(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.exchange.handle(w, r)
+	case grantTypeCIBA:
+		if h.ciba == nil {
+			oidcerror.WriteError(oidcerror.UnsupportedGrantType, "grant_type not supported", http.StatusBadRequest, w)
+			return
+		}
+		h.ciba.handleToken(w, r)
 	default:
 		http.Error(w, "grant_type not supported", http.StatusInternalServerError)
 		return
@@ -211,27 +219,69 @@ func (h *tokenHandler) createTokenFromCode(r *http.Request) (TokenResponse, *oid
 }
 
 func (h *tokenHandler) isValidClientSecret(clientSecret string, oidcClient *v3.OIDCClient) *oidcerror.Error {
-	secret, err := h.secretCache.Get(secretsNamespace, oidcClient.Status.ClientID)
+	key, found, err := h.matchClientSecret(clientSecret, oidcClient)
 	if err != nil {
 		return oidcerror.New(oidcerror.ServerError, "failed to get client secret")
 	}
 
-	clientSecretFound := false
-	for key, cs := range secret.Data {
-		if subtle.ConstantTimeCompare([]byte(clientSecret), cs) == 1 {
-			clientSecretFound = true
-			if err := h.updateClientSecretUsedTimeStamp(oidcClient, key); err != nil {
-				logrus.Errorf("[OIDC provider] failed to update client secret's used timestamp: %v", err)
-			}
-			break
-		}
-	}
-
-	if !clientSecretFound {
+	if !found {
 		return oidcerror.New(oidcerror.InvalidRequest, "invalid client_secret")
+	}
+	if err := h.updateClientSecretUsedTimeStamp(oidcClient, key); err != nil {
+		logrus.Errorf("[OIDC provider] failed to update client secret's used timestamp: %v", err)
 	}
 
 	return nil
+}
+
+// matchClientSecret finds which of the client's secrets, if any, the given one is.
+func (h *tokenHandler) matchClientSecret(clientSecret string, oidcClient *v3.OIDCClient) (key string, found bool, err error) {
+	secret, err := h.secretCache.Get(secretsNamespace, oidcClient.Status.ClientID)
+	if err != nil {
+		return "", false, err
+	}
+
+	for key, cs := range secret.Data {
+		if subtle.ConstantTimeCompare([]byte(clientSecret), cs) == 1 {
+			return key, true, nil
+		}
+	}
+
+	return "", false, nil
+}
+
+// authenticateClient authenticates the client of a request by the credentials in the Authorization
+// header or the form, as for the other grants. An unknown client and a wrong secret are not told
+// apart. When recordUse is set the use of the secret is recorded, which is a write, so it is not
+// done for every poll.
+func (h *tokenHandler) authenticateClient(r *http.Request, recordUse bool) (*v3.OIDCClient, *oidcerror.Error) {
+	clientID, clientSecret, ok := r.BasicAuth()
+	if !ok {
+		clientID = r.FormValue("client_id")
+		clientSecret = r.FormValue("client_secret")
+	}
+	invalid := oidcerror.New(oidcerror.InvalidClient, "client authentication failed")
+	if clientID == "" || clientSecret == "" {
+		return nil, invalid
+	}
+	oidcClient, err := h.getOIDCClientByClientID(clientID)
+	if err != nil {
+		return nil, invalid
+	}
+	key, found, err := h.matchClientSecret(clientSecret, oidcClient)
+	if err != nil {
+		return nil, oidcerror.New(oidcerror.ServerError, "failed to get client secret")
+	}
+	if !found {
+		return nil, invalid
+	}
+	if recordUse {
+		if err := h.updateClientSecretUsedTimeStamp(oidcClient, key); err != nil {
+			logrus.Errorf("[OIDC provider] failed to update client secret's used timestamp: %v", err)
+		}
+	}
+
+	return oidcClient, nil
 }
 
 // createRefreshToken issues a new id_token, access_token and refresh_token using a refresh_token

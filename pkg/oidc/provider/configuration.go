@@ -31,21 +31,32 @@ type OpenIDConfiguration struct {
 	ScopesSupported []string `json:"scopes_supported"`
 	// GrantTypesSupported the grants the token endpoint serves
 	GrantTypesSupported []string `json:"grant_types_supported"`
+	// TokenEndpointAuthMethodsSupported how clients authenticate at the token endpoint
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	// BackchannelAuthenticationEndpoint is the endpoint for Client-Initiated Backchannel Authentication (CIBA)
+	BackchannelAuthenticationEndpoint string `json:"backchannel_authentication_endpoint"`
+	// BackchannelTokenDeliveryModesSupported only poll is supported
+	BackchannelTokenDeliveryModesSupported []string `json:"backchannel_token_delivery_modes_supported"`
+	// BackchannelUserCodeParameterSupported user codes are not supported
+	BackchannelUserCodeParameterSupported bool `json:"backchannel_user_code_parameter_supported"`
 }
 
 func openIDConfigurationEndpoint(w http.ResponseWriter, r *http.Request) {
 	config := OpenIDConfiguration{
-		Issuer:                            oidcProviderHost(),
-		AuthorizationEndpoint:             oidcProviderHost() + "/authorize",
-		TokenEndpoint:                     oidcProviderHost() + "/token",
-		JWKSURI:                           oidcProviderHost() + "/.well-known/jwks.json",
-		UserInfoEndpoint:                  oidcProviderHost() + "/userinfo",
-		ResponseTypesSupported:            []string{"code"},
-		SubjectTypesSupported:             []string{"public"},
-		IDTokenSigningAlgsValuesSupported: []string{"RS256"},
-		CodeChallengeMethodsSupported:     []string{"S256"},
-		ScopesSupported:                   []string{"openid", "profile", "offline_access"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token", grantTypeTokenExchange},
+		Issuer:                                 oidcProviderHost(),
+		AuthorizationEndpoint:                  oidcProviderHost() + "/authorize",
+		TokenEndpoint:                          oidcProviderHost() + "/token",
+		JWKSURI:                                oidcProviderHost() + "/.well-known/jwks.json",
+		UserInfoEndpoint:                       oidcProviderHost() + "/userinfo",
+		ResponseTypesSupported:                 []string{"code"},
+		SubjectTypesSupported:                  []string{"public"},
+		IDTokenSigningAlgsValuesSupported:      []string{"RS256"},
+		CodeChallengeMethodsSupported:          []string{"S256"},
+		ScopesSupported:                        []string{"openid", "profile", "offline_access"},
+		GrantTypesSupported:                    []string{"authorization_code", "refresh_token", grantTypeTokenExchange, grantTypeCIBA},
+		TokenEndpointAuthMethodsSupported:      []string{"client_secret_basic", "client_secret_post"},
+		BackchannelAuthenticationEndpoint:      oidcProviderHost() + "/bc-authorize",
+		BackchannelTokenDeliveryModesSupported: []string{"poll"},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

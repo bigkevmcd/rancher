@@ -7,6 +7,7 @@ import (
 const (
 	OIDCClientType                               = "oidcClient"
 	OIDCClientFieldAnnotations                   = "annotations"
+	OIDCClientFieldBackchannel                   = "backchannel"
 	OIDCClientFieldCreated                       = "created"
 	OIDCClientFieldCreatorID                     = "creatorId"
 	OIDCClientFieldDescription                   = "description"
@@ -27,23 +28,24 @@ const (
 
 type OIDCClient struct {
 	types.Resource
-	Annotations                   map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
-	Created                       string            `json:"created,omitempty" yaml:"created,omitempty"`
-	CreatorID                     string            `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
-	Description                   string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Labels                        map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
-	Name                          string            `json:"name,omitempty" yaml:"name,omitempty"`
-	OwnerReferences               []OwnerReference  `json:"ownerReferences,omitempty" yaml:"ownerReferences,omitempty"`
-	RedirectURIs                  []string          `json:"redirectURIs,omitempty" yaml:"redirectURIs,omitempty"`
-	RefreshTokenExpirationSeconds int64             `json:"refreshTokenExpirationSeconds,omitempty" yaml:"refreshTokenExpirationSeconds,omitempty"`
-	Removed                       string            `json:"removed,omitempty" yaml:"removed,omitempty"`
-	Scopes                        []string          `json:"scopes,omitempty" yaml:"scopes,omitempty"`
-	State                         string            `json:"state,omitempty" yaml:"state,omitempty"`
-	Status                        OIDCClientStatus  `json:"status,omitempty" yaml:"status,omitempty"`
-	TokenExpirationSeconds        int64             `json:"tokenExpirationSeconds,omitempty" yaml:"tokenExpirationSeconds,omitempty"`
-	Transitioning                 string            `json:"transitioning,omitempty" yaml:"transitioning,omitempty"`
-	TransitioningMessage          string            `json:"transitioningMessage,omitempty" yaml:"transitioningMessage,omitempty"`
-	UUID                          string            `json:"uuid,omitempty" yaml:"uuid,omitempty"`
+	Annotations                   map[string]string      `json:"annotations,omitempty" yaml:"annotations,omitempty"`
+	Backchannel                   *OIDCClientBackchannel `json:"backchannel,omitempty" yaml:"backchannel,omitempty"`
+	Created                       string                 `json:"created,omitempty" yaml:"created,omitempty"`
+	CreatorID                     string                 `json:"creatorId,omitempty" yaml:"creatorId,omitempty"`
+	Description                   string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Labels                        map[string]string      `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Name                          string                 `json:"name,omitempty" yaml:"name,omitempty"`
+	OwnerReferences               []OwnerReference       `json:"ownerReferences,omitempty" yaml:"ownerReferences,omitempty"`
+	RedirectURIs                  []string               `json:"redirectURIs,omitempty" yaml:"redirectURIs,omitempty"`
+	RefreshTokenExpirationSeconds int64                  `json:"refreshTokenExpirationSeconds,omitempty" yaml:"refreshTokenExpirationSeconds,omitempty"`
+	Removed                       string                 `json:"removed,omitempty" yaml:"removed,omitempty"`
+	Scopes                        []string               `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+	State                         string                 `json:"state,omitempty" yaml:"state,omitempty"`
+	Status                        OIDCClientStatus       `json:"status,omitempty" yaml:"status,omitempty"`
+	TokenExpirationSeconds        int64                  `json:"tokenExpirationSeconds,omitempty" yaml:"tokenExpirationSeconds,omitempty"`
+	Transitioning                 string                 `json:"transitioning,omitempty" yaml:"transitioning,omitempty"`
+	TransitioningMessage          string                 `json:"transitioningMessage,omitempty" yaml:"transitioningMessage,omitempty"`
+	UUID                          string                 `json:"uuid,omitempty" yaml:"uuid,omitempty"`
 }
 
 type OIDCClientCollection struct {

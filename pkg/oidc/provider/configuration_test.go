@@ -99,5 +99,5 @@ func assertOpenIDConfigurationResponse(t *testing.T, rec *httptest.ResponseRecor
 	assert.Equal(t, []string{"RS256"}, response.IDTokenSigningAlgsValuesSupported)
 	assert.Equal(t, []string{"S256"}, response.CodeChallengeMethodsSupported)
 	assert.Equal(t, []string{"openid", "profile", "offline_access"}, response.ScopesSupported)
-	assert.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange"}, response.GrantTypesSupported)
+	assert.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange", "urn:openid:params:grant-type:ciba"}, response.GrantTypesSupported)
 }

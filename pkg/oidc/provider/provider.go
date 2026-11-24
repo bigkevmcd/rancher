@@ -9,6 +9,7 @@ import (
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	exttokenstore "github.com/rancher/rancher/pkg/ext/stores/tokens"
 	wrangmgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
+	"github.com/rancher/rancher/pkg/oidc/provider/ciba"
 	oidcerror "github.com/rancher/rancher/pkg/oidc/provider/error"
 	"github.com/rancher/rancher/pkg/oidc/provider/session"
 	"github.com/rancher/rancher/pkg/oidc/randomstring"
@@ -36,6 +37,7 @@ type Provider struct {
 	authHandler     *authorizeHandler
 	tokenHandler    *tokenHandler
 	userInfoHandler *userInfoHandler
+	cibaHandler     *cibaHandler
 }
 
 // OIDCClientIDIndexFunc indexes the .status.clientID field from OIDCClient
@@ -73,14 +75,28 @@ func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, 
 		return Provider{}, err
 	}
 
+	if err := ensureNamespaceWithRetry(ctx, namespaceClient, ciba.Namespace); err != nil {
+		return Provider{}, err
+	}
+
 	tokenHandler := newTokenHandler(extTokenStore, tokenCache, userLister, userAttributeLister, sessionStorage, jwks, oidcClientCache, oidcClientController, secretCache, tokenClient)
 	tokenHandler.exchange = newExchangeHandler(ctx, agentTrustCache, extTokenStore)
 
+	authHandler := newAuthorizeHandler(extTokenStore, userLister, sessionStorage, &randomstring.Generator{}, oidcClientCache)
+
+	cibaStore := ciba.NewStore(secretClient, secretCache)
+	go cibaStore.Cleanup(ctx, cibaCleanupInterval)
+	cibaHandler := newCIBAHandler(cibaStore, tokenHandler, userLister, oidcClientCache, extTokenStore,
+		// Approving takes a login token, which is what the authorize endpoint accepts too.
+		authHandler.getAndVerifyRancherTokenFromRequest)
+	tokenHandler.ciba = cibaHandler
+
 	return Provider{
 		jwksHandler:     jwks,
-		authHandler:     newAuthorizeHandler(extTokenStore, userLister, sessionStorage, &randomstring.Generator{}, oidcClientCache),
+		authHandler:     authHandler,
 		tokenHandler:    tokenHandler,
 		userInfoHandler: newUserInfoHandler(userLister, userAttributeLister, jwks, extTokenStore),
+		cibaHandler:     cibaHandler,
 	}, nil
 }
 
@@ -136,4 +152,9 @@ func (p *Provider) RegisterOIDCProviderHandles(mux *http.ServeMux) {
 	mux.HandleFunc("/oidc/authorize", p.middleware(p.authHandler.authEndpoint))
 	mux.HandleFunc("/oidc/token", p.middleware(p.tokenHandler.tokenEndpoint))
 	mux.HandleFunc("/oidc/userinfo", p.middleware(p.userInfoHandler.userInfoEndpoint))
+	if p.cibaHandler != nil {
+		mux.HandleFunc("POST /oidc/bc-authorize", p.middleware(p.cibaHandler.authorizeEndpoint))
+		mux.HandleFunc("GET /oidc/ciba/requests", p.middleware(p.cibaHandler.listEndpoint))
+		mux.HandleFunc("POST /oidc/ciba/requests/{id}", p.middleware(p.cibaHandler.decideEndpoint))
+	}
 }

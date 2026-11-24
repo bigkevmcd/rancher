@@ -75,4 +75,50 @@ type OIDCClientSpec struct {
 	//
 	// +optional
 	Scopes []string `json:"scopes"`
+
+	// Backchannel enables the client for Client-Initiated Backchannel Authentication (CIBA),
+	// by which an agent asks a user to approve access for it, and receives an agent token once
+	// the user approved. Without it the client can't make backchannel requests.
+	//
+	// +optional
+	Backchannel *OIDCClientBackchannel `json:"backchannel,omitempty"`
+}
+
+// OIDCClientBackchannel configures Client-Initiated Backchannel Authentication for a client.
+type OIDCClientBackchannel struct {
+	// AgentName identifies the agent in audit records and must be a valid DNS label. It defaults
+	// to the name of the client.
+	// +optional
+	AgentName string `json:"agentName,omitempty"`
+	// Scopes are the scopes the client may request. A scope is a name for a set of rules, which
+	// limit the agent token issued if the user approves. The user sees the names and the rules
+	// when asked to approve.
+	// +kubebuilder:validation:MinItems=1
+	Scopes []OIDCClientBackchannelScope `json:"scopes"`
+	// TokenExpirationSeconds is the lifetime of the agent tokens issued. It is limited by the
+	// agent-token-max-ttl-minutes setting.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=3600
+	// +optional
+	TokenExpirationSeconds int64 `json:"tokenExpirationSeconds,omitempty"`
+	// RequestExpirationSeconds is how long a user has to approve a request, unless the client asks
+	// for less. It can't be more than 600.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=600
+	// +kubebuilder:default=120
+	// +optional
+	RequestExpirationSeconds int64 `json:"requestExpirationSeconds,omitempty"`
+}
+
+// OIDCClientBackchannelScope names a set of rules for backchannel requests.
+type OIDCClientBackchannelScope struct {
+	// Name is the scope as requested, e.g. "read-deployments". It must not contain spaces.
+	// +kubebuilder:validation:Pattern=`^[^\s]+$`
+	Name string `json:"name"`
+	// Description is shown to the user who approves.
+	// +optional
+	Description string `json:"description,omitempty"`
+	// Rules limit the agent token, see AgentRule.
+	// +kubebuilder:validation:MinItems=1
+	Rules []AgentRule `json:"rules"`
 }

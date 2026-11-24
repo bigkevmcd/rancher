@@ -49,6 +49,98 @@ spec:
             description: Spec is the specification of the desired configuration for
               the oidc client.
             properties:
+              backchannel:
+                description: |-
+                  Backchannel enables the client for Client-Initiated Backchannel Authentication (CIBA),
+                  by which an agent asks a user to approve access for it, and receives an agent token once
+                  the user approved. Without it the client can't make backchannel requests.
+                properties:
+                  agentName:
+                    description: |-
+                      AgentName identifies the agent in audit records and must be a valid DNS label. It defaults
+                      to the name of the client.
+                    type: string
+                  requestExpirationSeconds:
+                    default: 120
+                    description: |-
+                      RequestExpirationSeconds is how long a user has to approve a request, unless the client asks
+                      for less. It can't be more than 600.
+                    format: int64
+                    maximum: 600
+                    minimum: 1
+                    type: integer
+                  scopes:
+                    description: |-
+                      Scopes are the scopes the client may request. A scope is a name for a set of rules, which
+                      limit the agent token issued if the user approves. The user sees the names and the rules
+                      when asked to approve.
+                    items:
+                      description: OIDCClientBackchannelScope names a set of rules
+                        for backchannel requests.
+                      properties:
+                        description:
+                          description: Description is shown to the user who approves.
+                          type: string
+                        name:
+                          description: Name is the scope as requested, e.g. "read-deployments".
+                            It must not contain spaces.
+                          pattern: ^[^\s]+$
+                          type: string
+                        rules:
+                          description: Rules limit the agent token, see AgentRule.
+                          items:
+                            description: |-
+                              AgentRule is a restricted form of an RBAC policy rule, which limits what an agent may do. Resource
+                              names and non-resource URLs are not supported.
+                            properties:
+                              apiGroups:
+                                description: |-
+                                  APIGroups is the list of API groups of the allowed resources. The empty string is the core
+                                  group. "*" matches all groups.
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                              resources:
+                                description: |-
+                                  Resources is the list of allowed resources, optionally with a subresource such as "pods/log".
+                                  "*" matches all resources.
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                              verbs:
+                                description: |-
+                                  Verbs is the list of allowed verbs, e.g. get, list, watch, create, update, patch, delete.
+                                  "*" matches all verbs.
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                            required:
+                            - apiGroups
+                            - resources
+                            - verbs
+                            type: object
+                          minItems: 1
+                          type: array
+                      required:
+                      - name
+                      - rules
+                      type: object
+                    minItems: 1
+                    type: array
+                  tokenExpirationSeconds:
+                    default: 3600
+                    description: |-
+                      TokenExpirationSeconds is the lifetime of the agent tokens issued. It is limited by the
+                      agent-token-max-ttl-minutes setting.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                required:
+                - scopes
+                type: object
               description:
                 description: Description provides additional context about the OIDC
                   client.
