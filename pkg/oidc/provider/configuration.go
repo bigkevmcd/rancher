@@ -37,8 +37,12 @@ type OpenIDConfiguration struct {
 	BackchannelAuthenticationEndpoint string `json:"backchannel_authentication_endpoint,omitempty"`
 	// BackchannelTokenDeliveryModesSupported only poll is supported
 	BackchannelTokenDeliveryModesSupported []string `json:"backchannel_token_delivery_modes_supported,omitempty"`
-	// BackchannelUserCodeParameterSupported user codes are not supported
-	BackchannelUserCodeParameterSupported bool `json:"backchannel_user_code_parameter_supported,omitempty"`
+	// BackchannelAuthenticationRequestSigningAlgValuesSupported are the algorithms for signed authentication
+	// requests. Signed requests are not supported, so it is an empty list, which a nil pointer would omit.
+	BackchannelAuthenticationRequestSigningAlgValuesSupported *[]string `json:"backchannel_authentication_request_signing_alg_values_supported,omitempty"`
+	// BackchannelUserCodeParameterSupported says whether the user_code parameter is supported. It is not, and
+	// false is stated, which a plain bool would omit.
+	BackchannelUserCodeParameterSupported *bool `json:"backchannel_user_code_parameter_supported,omitempty"`
 }
 
 func openIDConfigurationEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +64,8 @@ func openIDConfigurationEndpoint(w http.ResponseWriter, r *http.Request) {
 		config.GrantTypesSupported = append(config.GrantTypesSupported, grantTypeCIBA)
 		config.BackchannelAuthenticationEndpoint = oidcProviderHost() + "/bc-authorize"
 		config.BackchannelTokenDeliveryModesSupported = []string{"poll"}
+		config.BackchannelAuthenticationRequestSigningAlgValuesSupported = &[]string{}
+		config.BackchannelUserCodeParameterSupported = new(bool)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

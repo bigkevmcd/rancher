@@ -102,6 +102,8 @@ func assertOpenIDConfigurationResponse(t *testing.T, rec *httptest.ResponseRecor
 	assert.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange"}, response.GrantTypesSupported)
 	assert.Empty(t, response.BackchannelAuthenticationEndpoint)
 	assert.Empty(t, response.BackchannelTokenDeliveryModesSupported)
+	assert.Nil(t, response.BackchannelAuthenticationRequestSigningAlgValuesSupported)
+	assert.Nil(t, response.BackchannelUserCodeParameterSupported)
 }
 
 func TestOpenIDConfigurationEndpointWithCIBA(t *testing.T) {
@@ -111,9 +113,29 @@ func TestOpenIDConfigurationEndpointWithCIBA(t *testing.T) {
 
 	openIDConfigurationEndpoint(rec, httptest.NewRequest(http.MethodGet, "/oidc/.well-known/openid-configuration", nil))
 
+	body := rec.Body.String()
 	var response OpenIDConfiguration
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	require.NoError(t, json.Unmarshal([]byte(body), &response))
 	assert.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange", "urn:openid:params:grant-type:ciba"}, response.GrantTypesSupported)
 	assert.Equal(t, "https://rancher.com/oidc/bc-authorize", response.BackchannelAuthenticationEndpoint)
 	assert.Equal(t, []string{"poll"}, response.BackchannelTokenDeliveryModesSupported)
+	// Signed requests aren't supported: the key is there, with no algorithm.
+	require.NotNil(t, response.BackchannelAuthenticationRequestSigningAlgValuesSupported)
+	assert.Empty(t, *response.BackchannelAuthenticationRequestSigningAlgValuesSupported)
+	assert.Contains(t, body, `"backchannel_authentication_request_signing_alg_values_supported":[]`)
+	// User codes aren't supported, and the document says so rather than leaving it out.
+	require.NotNil(t, response.BackchannelUserCodeParameterSupported)
+	assert.False(t, *response.BackchannelUserCodeParameterSupported)
+	assert.Contains(t, body, `"backchannel_user_code_parameter_supported":false`)
+}
+
+// Without CIBA the document has none of the backchannel keys, whatever their value would be.
+func TestOpenIDConfigurationHasNoBackchannelKeysWithoutCIBA(t *testing.T) {
+	require.NoError(t, settings.ServerURL.Set("https://rancher.com"))
+	setCIBAFeatures(t, true, false)
+	rec := httptest.NewRecorder()
+
+	openIDConfigurationEndpoint(rec, httptest.NewRequest(http.MethodGet, "/oidc/.well-known/openid-configuration", nil))
+
+	assert.NotContains(t, rec.Body.String(), "backchannel")
 }
