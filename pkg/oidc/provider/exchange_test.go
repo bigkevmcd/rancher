@@ -481,3 +481,19 @@ func TestIssuerHTTPClient(t *testing.T) {
 		assert.LessOrEqual(t, len(buf), maxIssuerResponseBytes)
 	})
 }
+
+func TestValidateTrustIssuer(t *testing.T) {
+	trust := func(issuer string) *v3.AgentTrust {
+		return &v3.AgentTrust{
+			ObjectMeta: metav1.ObjectMeta{Name: "scaler"},
+			Spec: v3.AgentTrustSpec{
+				Issuer: issuer, Audience: "rancher", Subjects: []string{"sub"}, UserID: "u-1",
+				Rules: []v3.AgentRule{{Verbs: []string{"get"}, APIGroups: []string{""}, Resources: []string{"pods"}}},
+			},
+		}
+	}
+	assert.NoError(t, validateTrust(trust("https://issuer.example/path")))
+	for _, issuer := range []string{"https://issuer.example/#frag", "https://user@issuer.example", "https://user:pw@issuer.example", "http://issuer.example", "https:///x"} {
+		assert.Error(t, validateTrust(trust(issuer)), issuer)
+	}
+}

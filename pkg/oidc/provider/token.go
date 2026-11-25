@@ -158,7 +158,7 @@ func (h *tokenHandler) tokenEndpoint(w http.ResponseWriter, r *http.Request) {
 		}
 		h.exchange.handle(w, r)
 	case grantTypeCIBA:
-		if h.ciba == nil {
+		if h.ciba == nil || !cibaEnabled() {
 			oidcerror.WriteError(oidcerror.UnsupportedGrantType, "grant_type not supported", http.StatusBadRequest, w)
 			return
 		}

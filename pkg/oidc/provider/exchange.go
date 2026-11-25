@@ -200,8 +200,8 @@ func (h *exchangeHandler) trustsForIssuer(issuer string) ([]*v3.AgentTrust, erro
 // alone, e.g. for trusts created before it was tightened.
 func validateTrust(trust *v3.AgentTrust) error {
 	spec := trust.Spec
-	if u, err := url.Parse(spec.Issuer); err != nil || u.Scheme != "https" || u.Host == "" {
-		return fmt.Errorf("issuer must be an https URL")
+	if u, err := url.Parse(spec.Issuer); err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "" || u.User != nil {
+		return fmt.Errorf("issuer must be an https URL without a fragment or user info")
 	}
 	if spec.Audience == "" {
 		return fmt.Errorf("audience is required")

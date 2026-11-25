@@ -8,6 +8,7 @@ import (
 
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	exttokenstore "github.com/rancher/rancher/pkg/ext/stores/tokens"
+	"github.com/rancher/rancher/pkg/features"
 	wrangmgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/oidc/provider/ciba"
 	oidcerror "github.com/rancher/rancher/pkg/oidc/provider/error"
@@ -85,7 +86,7 @@ func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, 
 	authHandler := newAuthorizeHandler(extTokenStore, userLister, sessionStorage, &randomstring.Generator{}, oidcClientCache)
 
 	cibaStore := ciba.NewStore(secretClient, secretCache)
-	go cibaStore.Cleanup(ctx, cibaCleanupInterval)
+	go cibaStore.Cleanup(ctx, cibaCleanupInterval, cibaEnabled)
 	cibaHandler := newCIBAHandler(cibaStore, tokenHandler, userLister, oidcClientCache, extTokenStore,
 		// Approving takes a login token, which is what the authorize endpoint accepts too.
 		authHandler.getAndVerifyRancherTokenFromRequest)
@@ -153,8 +154,27 @@ func (p *Provider) RegisterOIDCProviderHandles(mux *http.ServeMux) {
 	mux.HandleFunc("/oidc/token", p.middleware(p.tokenHandler.tokenEndpoint))
 	mux.HandleFunc("/oidc/userinfo", p.middleware(p.userInfoHandler.userInfoEndpoint))
 	if p.cibaHandler != nil {
-		mux.HandleFunc("POST /oidc/bc-authorize", p.middleware(p.cibaHandler.authorizeEndpoint))
-		mux.HandleFunc("GET /oidc/ciba/requests", p.middleware(p.cibaHandler.listEndpoint))
-		mux.HandleFunc("POST /oidc/ciba/requests/{id}", p.middleware(p.cibaHandler.decideEndpoint))
+		// The routes are always registered and answer 404 while the feature is off, so that the
+		// feature can be toggled without a restart.
+		mux.HandleFunc("POST /oidc/bc-authorize", p.middleware(whenCIBAEnabled(p.cibaHandler.authorizeEndpoint)))
+		mux.HandleFunc("GET /oidc/ciba/requests", p.middleware(whenCIBAEnabled(p.cibaHandler.listEndpoint)))
+		mux.HandleFunc("POST /oidc/ciba/requests/{id}", p.middleware(whenCIBAEnabled(p.cibaHandler.decideEndpoint)))
+	}
+}
+
+// cibaEnabled returns whether backchannel authentication is on. It lives on the OIDC provider, so it
+// needs that feature too.
+func cibaEnabled() bool {
+	return features.OIDCProvider.Enabled() && features.CIBAAuthorization.Enabled()
+}
+
+// whenCIBAEnabled serves next only while the ciba-authorization feature is enabled.
+func whenCIBAEnabled(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !cibaEnabled() {
+			http.NotFound(w, r)
+			return
+		}
+		next(w, r)
 	}
 }

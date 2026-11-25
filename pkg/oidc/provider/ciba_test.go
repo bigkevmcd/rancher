@@ -14,6 +14,7 @@ import (
 	ext "github.com/rancher/rancher/pkg/apis/ext.cattle.io/v1"
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
+	"github.com/rancher/rancher/pkg/features"
 	"github.com/rancher/rancher/pkg/oidc/provider/ciba"
 	"github.com/rancher/rancher/pkg/oidc/provider/ciba/cibatest"
 	oidcerror "github.com/rancher/rancher/pkg/oidc/provider/error"
@@ -110,6 +111,7 @@ func newCIBAFixture(t *testing.T, mutateClient func(c *v3.OIDCClient)) *cibaFixt
 		return []*v3.OIDCClient{client}, nil
 	}).AnyTimes()
 
+	setCIBAFeatures(t, true, true)
 	f := &cibaFixture{
 		secrets: cibatest.NewSecrets(),
 		clients: clients,
@@ -144,6 +146,18 @@ func newCIBAFixture(t *testing.T, mutateClient func(c *v3.OIDCClient)) *cibaFixt
 	f.handler.now = clock
 	f.tokenSrv = &tokenHandler{ciba: f.handler}
 	return f
+}
+
+// setCIBAFeatures sets the oidc-provider and ciba-authorization features for the test.
+func setCIBAFeatures(t *testing.T, oidcProvider, ciba bool) {
+	t.Helper()
+	prevOIDC, prevCIBA := features.OIDCProvider.Enabled(), features.CIBAAuthorization.Enabled()
+	features.OIDCProvider.Set(oidcProvider)
+	features.CIBAAuthorization.Set(ciba)
+	t.Cleanup(func() {
+		features.OIDCProvider.Set(prevOIDC)
+		features.CIBAAuthorization.Set(prevCIBA)
+	})
 }
 
 func basic(r *http.Request, id, secret string) {
@@ -638,6 +652,60 @@ func TestBackchannelPoll(t *testing.T) {
 		h.tokenEndpoint(w, r)
 		assert.Equal(t, "unsupported_grant_type", errorCode(t, w))
 	})
+}
+
+func TestBackchannelFeatureGate(t *testing.T) {
+	tests := map[string]struct {
+		oidcProvider, ciba bool
+		wantEnabled        bool
+	}{
+		"both enabled":                {oidcProvider: true, ciba: true, wantEnabled: true},
+		"ciba-authorization disabled": {oidcProvider: true, ciba: false},
+		"oidc-provider disabled":      {oidcProvider: false, ciba: true},
+		"both disabled":               {},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			f := newCIBAFixture(t, nil)
+			setCIBAFeatures(t, tt.oidcProvider, tt.ciba)
+			clients := fake.NewMockNonNamespacedCacheInterface[*v3.OIDCClient](gomock.NewController(t))
+			clients.EXPECT().List(gomock.Any()).Return(nil, nil).AnyTimes()
+			p := Provider{cibaHandler: f.handler, tokenHandler: f.tokenSrv, authHandler: &authorizeHandler{oidcClientCache: clients}}
+			mux := http.NewServeMux()
+			p.RegisterOIDCProviderHandles(mux)
+
+			serve := func(method, path string) *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				mux.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+				return w
+			}
+			for _, route := range []struct{ method, path string }{
+				{http.MethodPost, "/oidc/bc-authorize"},
+				{http.MethodGet, "/oidc/ciba/requests"},
+				{http.MethodPost, "/oidc/ciba/requests/abc"},
+			} {
+				code := serve(route.method, route.path).Code
+				if tt.wantEnabled {
+					assert.NotEqual(t, http.StatusNotFound, code, route.path)
+				} else {
+					assert.Equal(t, http.StatusNotFound, code, route.path)
+				}
+			}
+
+			// The token grant is unsupported when disabled and reaches the handler otherwise.
+			authReqID := "x"
+			form := url.Values{"grant_type": {grantTypeCIBA}, "auth_req_id": {authReqID}}
+			r := httptest.NewRequest(http.MethodPost, "/oidc/token", strings.NewReader(form.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, r)
+			if tt.wantEnabled {
+				assert.NotEqual(t, "unsupported_grant_type", errorCode(t, w))
+			} else {
+				assert.Equal(t, "unsupported_grant_type", errorCode(t, w))
+			}
+		})
+	}
 }
 
 func TestBackchannelApproval(t *testing.T) {

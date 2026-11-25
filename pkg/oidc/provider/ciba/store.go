@@ -330,8 +330,8 @@ func (s *Store) CountPending(clientID, userID string) (int, error) {
 	return count, nil
 }
 
-// Cleanup removes expired requests until the context is done.
-func (s *Store) Cleanup(ctx context.Context, every time.Duration) {
+// Cleanup removes expired requests until the context is done. A tick is skipped while enabled returns false.
+func (s *Store) Cleanup(ctx context.Context, every time.Duration, enabled func() bool) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -339,7 +339,9 @@ func (s *Store) Cleanup(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.removeExpired()
+			if enabled() {
+				s.removeExpired()
+			}
 		}
 	}
 }

@@ -99,5 +99,21 @@ func assertOpenIDConfigurationResponse(t *testing.T, rec *httptest.ResponseRecor
 	assert.Equal(t, []string{"RS256"}, response.IDTokenSigningAlgsValuesSupported)
 	assert.Equal(t, []string{"S256"}, response.CodeChallengeMethodsSupported)
 	assert.Equal(t, []string{"openid", "profile", "offline_access"}, response.ScopesSupported)
+	assert.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange"}, response.GrantTypesSupported)
+	assert.Empty(t, response.BackchannelAuthenticationEndpoint)
+	assert.Empty(t, response.BackchannelTokenDeliveryModesSupported)
+}
+
+func TestOpenIDConfigurationEndpointWithCIBA(t *testing.T) {
+	require.NoError(t, settings.ServerURL.Set("https://rancher.com"))
+	setCIBAFeatures(t, true, true)
+	rec := httptest.NewRecorder()
+
+	openIDConfigurationEndpoint(rec, httptest.NewRequest(http.MethodGet, "/oidc/.well-known/openid-configuration", nil))
+
+	var response OpenIDConfiguration
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
 	assert.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange", "urn:openid:params:grant-type:ciba"}, response.GrantTypesSupported)
+	assert.Equal(t, "https://rancher.com/oidc/bc-authorize", response.BackchannelAuthenticationEndpoint)
+	assert.Equal(t, []string{"poll"}, response.BackchannelTokenDeliveryModesSupported)
 }

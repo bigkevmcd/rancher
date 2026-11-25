@@ -146,6 +146,12 @@ var (
 		IsPrime(), // OIDC is only default enabled on prime, but available to community users
 		false,
 		true)
+	CIBAAuthorization = newFeature(
+		"ciba-authorization",
+		"Let AI agents ask a user for approval with backchannel authentication (CIBA) on the embedded OIDC provider. Requires the oidc-provider feature.",
+		false,
+		true,
+		true)
 	RancherSCCRegistrationExtension = newPrimeFeature(
 		"rancher-scc-registration-extension",
 		"Enable Rancher's SCC registration extension to register the system(s) for customer support",
