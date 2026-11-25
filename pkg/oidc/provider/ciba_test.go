@@ -423,6 +423,7 @@ func TestBackchannelAuthorize(t *testing.T) {
 			f.handler.authorizeEndpoint(w, r)
 			assert.Equal(t, http.StatusBadRequest, w.Code, name)
 			assert.Equal(t, "invalid_request", errorCode(t, w), name)
+			assert.Contains(t, w.Body.String(), "content type", name)
 		}
 		assert.Empty(t, f.secrets.Items)
 	})
