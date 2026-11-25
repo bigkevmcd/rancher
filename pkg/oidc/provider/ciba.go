@@ -439,7 +439,10 @@ func (h *cibaHandler) poll(r *http.Request, client *v3.OIDCClient) (*cibaTokenRe
 }
 
 // pending answers a poll of a request which waits for the user. A client polling faster than the
-// interval is told to slow down, and the interval grows, up to a limit. Only that growth is written, so
+// interval is told to slow down (CIBA Core section 11, RFC 8628 section 3.5), and the interval grows by
+// cibaSlowDownStep, which is at least the 5 seconds the spec requires, up to cibaMaxInterval. At the
+// limit the interval stops growing, but a client polling too fast is still told to slow down: the
+// answer is never authorization_pending for a poll which came too soon. Only the growth is written, so
 // a client which hammers the endpoint costs reads only.
 func (h *cibaHandler) pending(req *ciba.Request, now time.Time) *oidcerror.Error {
 	interval := time.Duration(req.IntervalSeconds) * time.Second

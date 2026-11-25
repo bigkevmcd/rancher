@@ -672,6 +672,38 @@ func TestBackchannelPoll(t *testing.T) {
 		assert.Equal(t, "authorization_pending", errorCode(t, f.poll(authReqID)))
 	})
 
+	t.Run("at the limit of the interval a poll too soon is still told to slow down", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		authReqID := f.start(t, "alice")
+		require.NoError(t, func() error {
+			_, err := f.store.Update(idOf(authReqID), func(r *ciba.Request) error {
+				r.IntervalSeconds = cibaMaxInterval
+				r.LastPollAt = f.clock
+				return nil
+			})
+			return err
+		}())
+
+		f.clock = f.clock.Add(time.Duration(cibaMaxInterval-1) * time.Second)
+		w := f.poll(authReqID)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "slow_down", errorCode(t, w))
+		assert.Contains(t, w.Body.String(), fmt.Sprintf("every %d seconds", cibaMaxInterval))
+		assert.Equal(t, cibaMaxInterval, f.request(t, authReqID).IntervalSeconds, "the interval stays at the limit")
+
+		f.clock = f.clock.Add(time.Second)
+		assert.Equal(t, "authorization_pending", errorCode(t, f.poll(authReqID)))
+	})
+
+	t.Run("each slow_down below the limit adds at least 5 seconds", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		authReqID := f.start(t, "alice")
+		assert.Equal(t, "authorization_pending", errorCode(t, f.poll(authReqID)))
+		before := f.request(t, authReqID).IntervalSeconds
+		assert.Equal(t, "slow_down", errorCode(t, f.poll(authReqID)))
+		assert.GreaterOrEqual(t, f.request(t, authReqID).IntervalSeconds, before+5)
+	})
+
 	t.Run("polling after the interval is not too fast", func(t *testing.T) {
 		f := newCIBAFixture(t, nil)
 		authReqID := f.start(t, "alice")
