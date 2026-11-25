@@ -83,6 +83,7 @@ func TestOpenIDConfigurationEndpointWithoutOIDCClients(t *testing.T) {
 
 func TestOpenIDConfigurationBackchannelMetadata(t *testing.T) {
 	require.NoError(t, settings.ServerURL.Set("https://rancher.com"))
+	setCIBAFeatures(t, true, true)
 	rec := httptest.NewRecorder()
 	openIDConfigurationEndpoint(rec, httptest.NewRequest(http.MethodGet, "/oidc/.well-known/openid-configuration", nil))
 
@@ -95,8 +96,8 @@ func TestOpenIDConfigurationBackchannelMetadata(t *testing.T) {
 	assert.Equal(t, []any{"poll"}, raw["backchannel_token_delivery_modes_supported"])
 	// Sent as false and not left out, which would mean the same.
 	assert.Equal(t, false, raw["backchannel_user_code_parameter_supported"])
-	// No signed authentication requests, which is what the omission says.
-	assert.NotContains(t, raw, "backchannel_authentication_request_signing_alg_values_supported")
+	// No signed authentication requests: the key is there, with no algorithm.
+	assert.Equal(t, []any{}, raw["backchannel_authentication_request_signing_alg_values_supported"])
 	assert.Contains(t, raw["grant_types_supported"], "urn:openid:params:grant-type:ciba")
 	assert.Equal(t, []any{"RS256"}, raw["id_token_signing_alg_values_supported"])
 	assert.Equal(t, []any{"client_secret_basic", "client_secret_post"}, raw["token_endpoint_auth_methods_supported"])

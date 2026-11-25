@@ -91,6 +91,7 @@ func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, 
 		// Approving takes a login token, which is what the authorize endpoint accepts too.
 		authHandler.getAndVerifyRancherTokenFromRequest)
 	tokenHandler.ciba = cibaHandler
+	cibaHandler.signIDToken = tokenHandler.signIDTokenClaims
 
 	return Provider{
 		jwksHandler:     jwks,

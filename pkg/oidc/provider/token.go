@@ -475,14 +475,32 @@ func (h *tokenHandler) createTokenResponse(rancherToken accessor.TokenAccessor, 
 	return resp, nil
 }
 
-func createIDToken(oidcClient *v3.OIDCClient, rancherToken accessor.TokenAccessor, scopes []string, user *v3.User, nonce string, groups []string, kid string, now time.Time) *jwt.Token {
-	idClaims := jwt.MapClaims{
-		"aud": []string{oidcClient.Status.ClientID},
-		"exp": now.Add(time.Duration(oidcClient.Spec.TokenExpirationSeconds) * time.Second).Unix(),
+// idTokenClaims returns the claims every ID token of the provider has. The subject is the user's ID,
+// whatever the flow.
+func idTokenClaims(clientID, userID string, now, expiresAt time.Time) jwt.MapClaims {
+	return jwt.MapClaims{
+		"aud": []string{clientID},
+		"exp": expiresAt.Unix(),
 		"iss": settings.ServerURL.Get() + "/oidc",
 		"iat": now.Unix(),
-		"sub": rancherToken.GetUserID(),
+		"sub": userID,
 	}
+}
+
+// signIDTokenClaims signs the claims of an ID token with the signing key of the provider, as RS256.
+func (h *tokenHandler) signIDTokenClaims(claims jwt.MapClaims) (string, error) {
+	key, kid, err := h.jwks.GetSigningKey()
+	if err != nil {
+		return "", fmt.Errorf("getting signing key: %w", err)
+	}
+	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	idToken.Header["kid"] = kid
+	return idToken.SignedString(key)
+}
+
+func createIDToken(oidcClient *v3.OIDCClient, rancherToken accessor.TokenAccessor, scopes []string, user *v3.User, nonce string, groups []string, kid string, now time.Time) *jwt.Token {
+	idClaims := idTokenClaims(oidcClient.Status.ClientID, rancherToken.GetUserID(),
+		now, now.Add(time.Duration(oidcClient.Spec.TokenExpirationSeconds)*time.Second))
 
 	if slices.Contains(scopes, "profile") {
 		idClaims["name"] = user.DisplayName

@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	ext "github.com/rancher/rancher/pkg/apis/ext.cattle.io/v1"
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/accessor"
@@ -19,6 +22,7 @@ import (
 	"github.com/rancher/rancher/pkg/oidc/provider/ciba"
 	"github.com/rancher/rancher/pkg/oidc/provider/ciba/cibatest"
 	oidcerror "github.com/rancher/rancher/pkg/oidc/provider/error"
+	"github.com/rancher/rancher/pkg/settings"
 	"github.com/rancher/wrangler/v3/pkg/generic/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,6 +149,11 @@ func newCIBAFixture(t *testing.T, mutateClient func(c *v3.OIDCClient)) *cibaFixt
 	f.handler = newCIBAHandler(f.store, clients, users, oidcCache, f.creator, verify)
 	f.handler.limiter = rate.NewLimiter(rate.Inf, 1)
 	f.handler.now = clock
+	f.handler.signIDToken = func(claims jwt.MapClaims) (string, error) {
+		idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+		idToken.Header["kid"] = "test-kid"
+		return idToken.SignedString(cibaSigningKey)
+	}
 	f.tokenSrv = &tokenHandler{ciba: f.handler}
 	return f
 }
@@ -160,6 +169,14 @@ func setCIBAFeatures(t *testing.T, oidcProvider, ciba bool) {
 		features.CIBAAuthorization.Set(prevCIBA)
 	})
 }
+
+var cibaSigningKey = func() *rsa.PrivateKey {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	return key
+}()
 
 func basic(r *http.Request, id, secret string) {
 	r.SetBasicAuth(id, secret)
@@ -497,6 +514,161 @@ func TestBackchannelAuthorize(t *testing.T) {
 	})
 }
 
+func TestAccessTokenHash(t *testing.T) {
+	// The example of OpenID Connect Core, appendix A.3.
+	assert.Equal(t, "77QmUPtjPfzWtF2AnpK9RQ", accessTokenHash("jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y"))
+}
+
+func TestResolveScopes(t *testing.T) {
+	config := backchannelClient("ops", cibaClientID).Spec.Backchannel
+	config.Scopes = append(config.Scopes, v3.OIDCClientBackchannelScope{
+		Name:  "openid",
+		Rules: []v3.AgentRule{{Verbs: []string{"*"}, APIGroups: []string{"*"}, Resources: []string{"*"}}},
+	})
+
+	for name, test := range map[string]struct {
+		requested string
+		scopes    []string
+		rules     int
+		code      string
+	}{
+		"agent scope":            {"read-pods", []string{"read-pods"}, 1, ""},
+		"openid first":           {"openid read-pods", []string{"openid", "read-pods"}, 1, ""},
+		"openid last":            {"read-pods scale openid", []string{"read-pods", "scale", "openid"}, 2, ""},
+		"openid twice":           {"openid read-pods openid", []string{"openid", "read-pods"}, 1, ""},
+		"openid alone":           {"openid", nil, 0, "invalid_scope"},
+		"nothing":                {"  ", nil, 0, "invalid_scope"},
+		"unknown":                {"openid admin", nil, 0, "invalid_scope"},
+		"profile is not a scope": {"openid profile read-pods", nil, 0, "invalid_scope"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			scopes, rules, oidcErr := resolveScopes(config, test.requested)
+			if test.code != "" {
+				require.NotNil(t, oidcErr)
+				assert.Equal(t, test.code, oidcErr.Error)
+				return
+			}
+			require.Nil(t, oidcErr)
+			assert.Equal(t, test.scopes, scopes)
+			assert.Len(t, rules, test.rules, "openid adds no rules, even if a client has a scope of that name")
+		})
+	}
+}
+
+func TestBackchannelIDToken(t *testing.T) {
+	require.NoError(t, settings.ServerURL.Set("https://rancher.com"))
+	parse := func(t *testing.T, raw string) jwt.MapClaims {
+		t.Helper()
+		claims := jwt.MapClaims{}
+		token, err := jwt.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) {
+			return &cibaSigningKey.PublicKey, nil
+		}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithTimeFunc(func() time.Time { return time.Date(2026, 11, 24, 12, 0, 20, 0, time.UTC) }))
+		require.NoError(t, err)
+		assert.Equal(t, "test-kid", token.Header["kid"])
+		return claims
+	}
+	collect := func(t *testing.T, f *cibaFixture, scope string) cibaTokenResponse {
+		t.Helper()
+		authReqID := f.start(t, "alice", "scope", scope)
+		f.clock = f.clock.Add(10 * time.Second)
+		require.Equal(t, http.StatusNoContent, f.approve("user-1", idOf(authReqID)).Code)
+		f.clock = f.clock.Add(10 * time.Second)
+		w := f.poll(authReqID)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var resp cibaTokenResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		return resp
+	}
+
+	t.Run("openid gets an ID token", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		resp := collect(t, f, "openid read-pods")
+		assert.Equal(t, "openid read-pods", resp.Scope)
+		require.NotEmpty(t, resp.IDToken)
+
+		claims := parse(t, resp.IDToken)
+		assert.Equal(t, "u-1", claims["sub"], "the user, as in the authorize flow")
+		assert.Equal(t, []any{cibaClientID}, claims["aud"])
+		assert.Equal(t, "https://rancher.com/oidc", claims["iss"])
+		assert.EqualValues(t, f.clock.Unix(), claims["iat"])
+		assert.EqualValues(t, f.clock.Add(600*time.Second).Unix(), claims["exp"], "no later than the agent token")
+		assert.EqualValues(t, f.clock.Add(-10*time.Second).Unix(), claims["auth_time"], "when the user approved")
+		assert.Equal(t, accessTokenHash(resp.AccessToken), claims["at_hash"])
+		assert.NotContains(t, claims, "nonce")
+		for _, name := range []string{"name", "groups", "email"} {
+			assert.NotContains(t, claims, name)
+		}
+	})
+
+	t.Run("the ID token does not outlive the agent token", func(t *testing.T) {
+		f := newCIBAFixture(t, func(c *v3.OIDCClient) { c.Spec.Backchannel.TokenExpirationSeconds = 60 })
+		resp := collect(t, f, "openid read-pods")
+		assert.EqualValues(t, f.clock.Add(time.Duration(resp.ExpiresIn)*time.Second).Unix(), parse(t, resp.IDToken)["exp"])
+		assert.EqualValues(t, 60, resp.ExpiresIn)
+	})
+
+	t.Run("without openid there is no ID token", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		resp := collect(t, f, "read-pods")
+		assert.Empty(t, resp.IDToken)
+		assert.Equal(t, "read-pods", resp.Scope)
+
+		authReqID := f.start(t, "bob")
+		require.Equal(t, http.StatusNoContent, f.approve("user-2", idOf(authReqID)).Code)
+		f.clock = f.clock.Add(6 * time.Second)
+		assert.NotContains(t, f.poll(authReqID).Body.String(), "id_token")
+	})
+
+	t.Run("openid grants no rules", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		collect(t, f, "openid read-pods")
+		require.Len(t, f.creator.requests, 1)
+		assert.Len(t, f.creator.requests[0].Agent.Rules, 1)
+	})
+
+	t.Run("openid alone is refused", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		w := f.authorize(authForm("alice", "scope", "openid"))
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "invalid_scope", errorCode(t, w))
+		assert.Empty(t, f.secrets.Items)
+	})
+
+	t.Run("a failure to sign is a server error", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		f.handler.signIDToken = func(jwt.MapClaims) (string, error) { return "", fmt.Errorf("no key") }
+		authReqID := f.start(t, "alice", "scope", "openid read-pods")
+		require.Equal(t, http.StatusNoContent, f.approve("user-1", idOf(authReqID)).Code)
+		f.clock = f.clock.Add(6 * time.Second)
+		w := f.poll(authReqID)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Equal(t, "server_error", errorCode(t, w))
+		assert.NotContains(t, w.Body.String(), "ext/")
+	})
+
+	t.Run("without a signer no token is created for openid", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		f.handler.signIDToken = nil
+		authReqID := f.start(t, "alice", "scope", "openid read-pods")
+		require.Equal(t, http.StatusNoContent, f.approve("user-1", idOf(authReqID)).Code)
+		f.clock = f.clock.Add(6 * time.Second)
+		assert.Equal(t, http.StatusInternalServerError, f.poll(authReqID).Code)
+		assert.Empty(t, f.creator.requests)
+	})
+
+	t.Run("the approval time is recorded on approval only", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		approved := f.start(t, "alice")
+		denied := f.start(t, "bob")
+		assert.True(t, f.request(t, approved).ApprovedAt.IsZero())
+		f.clock = f.clock.Add(7 * time.Second)
+		require.Equal(t, http.StatusNoContent, f.approve("user-1", idOf(approved)).Code)
+		require.Equal(t, http.StatusNoContent, f.decide("user-2", idOf(denied), "application/json", `{"decision":"deny"}`).Code)
+		assert.Equal(t, f.clock, f.request(t, approved).ApprovedAt)
+		assert.True(t, f.request(t, denied).ApprovedAt.IsZero())
+	})
+}
+
 func TestClientAuthStatus(t *testing.T) {
 	for code, want := range map[string]int{
 		oidcerror.InvalidClient:      http.StatusUnauthorized,
@@ -620,7 +792,7 @@ func TestBackchannelPoll(t *testing.T) {
 		f.clock = f.clock.Add(time.Hour)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		go f.store.Cleanup(ctx, time.Millisecond)
+		go f.store.Cleanup(ctx, time.Millisecond, func() bool { return true })
 		assert.Eventually(t, func() bool {
 			return errorCode(t, f.poll(authReqID)) == "invalid_grant"
 		}, 5*time.Second, 5*time.Millisecond)
@@ -1047,4 +1219,33 @@ func TestBackchannelTokenPrincipal(t *testing.T) {
 	assert.Equal(t, "alice", p.LoginName)
 	assert.Equal(t, "user", p.PrincipalType)
 	assert.Empty(t, p.ExtraInfo, "extra info is not copied")
+}
+
+type fixedKeyGetter struct{ err error }
+
+func (g fixedKeyGetter) GetSigningKey() (*rsa.PrivateKey, string, error) {
+	return cibaSigningKey, "kid-1", g.err
+}
+func (g fixedKeyGetter) GetPublicKey(string) (*rsa.PublicKey, error) {
+	return &cibaSigningKey.PublicKey, nil
+}
+
+func TestSignIDTokenClaims(t *testing.T) {
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, settings.ServerURL.Set("https://rancher.com"))
+	raw, err := (&tokenHandler{jwks: fixedKeyGetter{}}).signIDTokenClaims(idTokenClaims("c1", "u-1", now, now.Add(time.Minute)))
+	require.NoError(t, err)
+
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) { return &cibaSigningKey.PublicKey, nil },
+		jwt.WithValidMethods([]string{"RS256"}), jwt.WithTimeFunc(func() time.Time { return now }))
+	require.NoError(t, err)
+	assert.Equal(t, "kid-1", token.Header["kid"])
+	assert.Equal(t, "u-1", claims["sub"])
+	assert.Equal(t, []any{"c1"}, claims["aud"])
+	assert.Equal(t, "https://rancher.com/oidc", claims["iss"])
+	assert.EqualValues(t, now.Add(time.Minute).Unix(), claims["exp"])
+
+	_, err = (&tokenHandler{jwks: fixedKeyGetter{err: fmt.Errorf("no key")}}).signIDTokenClaims(claims)
+	assert.Error(t, err)
 }

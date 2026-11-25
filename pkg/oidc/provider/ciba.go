@@ -1,9 +1,12 @@
 package provider
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/rancher/rancher/pkg/auth/audit"
 	"maps"
 	"mime"
@@ -33,6 +36,12 @@ import (
 // without a browser, the user approves in Rancher, and the agent collects an agent token.
 const (
 	grantTypeCIBA = "urn:openid:params:grant-type:ciba"
+
+	// scopeOpenID is the scope which asks for an ID token. CIBA Core section 7.1 says a request MUST
+	// contain it, but it is optional here, as a deliberate profile choice: an agent which only wants an
+	// agent token doesn't have to ask for an identity. It grants no rules: it is not one of the scopes
+	// an administrator configures, and a configured scope of that name is ignored.
+	scopeOpenID = "openid"
 
 	cibaDefaultInterval     = 5
 	cibaMaxInterval         = 60
@@ -66,6 +75,9 @@ type cibaHandler struct {
 	users   wrangmgmtv3.UserCache
 	oidc    wrangmgmtv3.OIDCClientCache
 	tokens  agentTokenCreator
+	// signIDToken signs the claims of an ID token. Without it, a request for the openid scope can't be
+	// collected.
+	signIDToken func(claims jwt.MapClaims) (string, error)
 	// verifyUser authenticates the user who approves. It only accepts login tokens.
 	verifyUser userTokenVerifier
 	// limiter limits the requests which cause writes or work, as a whole.
@@ -259,7 +271,8 @@ func agentName(client *v3.OIDCClient) string {
 }
 
 // resolveScopes checks the requested scopes against the client's and returns them with the rules
-// they add up to.
+// they add up to. The openid scope is accepted, and adds no rules. A token has to have rules, so a
+// request needs a scope of the client besides openid.
 func resolveScopes(config *v3.OIDCClientBackchannel, requested string) ([]string, []ext.TokenAgentRule, *oidcerror.Error) {
 	names := strings.Fields(requested)
 	if len(names) == 0 {
@@ -272,6 +285,10 @@ func resolveScopes(config *v3.OIDCClientBackchannel, requested string) ([]string
 		if slices.Contains(scopes, name) {
 			continue
 		}
+		if name == scopeOpenID {
+			scopes = append(scopes, name)
+			continue
+		}
 		i := slices.IndexFunc(config.Scopes, func(s v3.OIDCClientBackchannelScope) bool { return s.Name == name })
 		if i < 0 {
 			return nil, nil, oidcerror.Newf(oidcerror.InvalidScope, "invalid scope: %s", name)
@@ -280,6 +297,9 @@ func resolveScopes(config *v3.OIDCClientBackchannel, requested string) ([]string
 		for _, rule := range config.Scopes[i].Rules {
 			rules = append(rules, ext.TokenAgentRule{Verbs: rule.Verbs, APIGroups: rule.APIGroups, Resources: rule.Resources})
 		}
+	}
+	if len(rules) == 0 {
+		return nil, nil, oidcerror.New(oidcerror.InvalidScope, "a scope other than openid is required")
 	}
 	return scopes, rules, nil
 }
@@ -356,6 +376,8 @@ type cibaTokenResponse struct {
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int64  `json:"expires_in"`
 	Scope       string `json:"scope"`
+	// IDToken is there if the openid scope was requested.
+	IDToken string `json:"id_token,omitempty"`
 }
 
 // handleToken serves the CIBA grant on the token endpoint, whose form is already parsed. The client
@@ -472,6 +494,12 @@ func (h *cibaHandler) pending(req *ciba.Request, now time.Time) *oidcerror.Error
 // of several polls at the same time only one gets a token; if the request changed since it was read,
 // the caller reads it again.
 func (h *cibaHandler) issue(req *ciba.Request) (resp *cibaTokenResponse, oidcErr *oidcerror.Error, retry bool) {
+	wantsIDToken := slices.Contains(req.Scopes, scopeOpenID)
+	if wantsIDToken && h.signIDToken == nil {
+		logrus.Errorf("[OIDC provider] backchannel request %s asks for an ID token, which can't be signed", req.ID)
+		return nil, oidcerror.New(oidcerror.ServerError, "failed to create token"), false
+	}
+
 	if err := h.store.Consume(req); err != nil {
 		if apierrors.IsConflict(err) {
 			return nil, nil, true
@@ -504,12 +532,45 @@ func (h *cibaHandler) issue(req *ciba.Request) (resp *cibaTokenResponse, oidcErr
 	// The token value is never logged.
 	logrus.Infof("[OIDC provider] backchannel request %s issued agent token %s for user %s", req.ID, token.Name, req.UserID)
 
-	return &cibaTokenResponse{
+	resp = &cibaTokenResponse{
 		AccessToken: token.Status.BearerToken,
 		TokenType:   bearerTokenType,
 		ExpiresIn:   token.Spec.TTL / 1000,
 		Scope:       strings.Join(req.Scopes, " "),
-	}, nil, false
+	}
+	if wantsIDToken {
+		// The request is consumed and the agent token exists by now: if this fails, the client gets
+		// an error and no token, and the unused agent token lapses with its TTL.
+		resp.IDToken, err = h.idToken(req, resp)
+		if err != nil {
+			logrus.Errorf("[OIDC provider] backchannel request %s: failed to create ID token: %v", req.ID, err)
+			return nil, oidcerror.New(oidcerror.ServerError, "failed to create token"), false
+		}
+	}
+	return resp, nil, false
+}
+
+// idToken signs the ID token for an issued agent token. It has the standard claims only: the profile
+// claims and the groups of the authorize flow are not added, whatever the scopes. The audience is the
+// client, the subject is the user as it is in the authorize flow, and the token lives no longer than
+// the agent token. auth_time is when the user approved, at_hash binds the ID token to the access token
+// (CIBA Core section 10.1.1 leaves it optional in poll mode), and there is no nonce, as the request has
+// none.
+func (h *cibaHandler) idToken(req *ciba.Request, resp *cibaTokenResponse) (string, error) {
+	now := h.now()
+	claims := idTokenClaims(req.ClientID, req.UserID, now, now.Add(time.Duration(resp.ExpiresIn)*time.Second))
+	if !req.ApprovedAt.IsZero() {
+		claims["auth_time"] = req.ApprovedAt.Unix()
+	}
+	claims["at_hash"] = accessTokenHash(resp.AccessToken)
+	return h.signIDToken(claims)
+}
+
+// accessTokenHash is at_hash of OpenID Connect Core section 3.1.3.6: the base64url encoding of the left
+// half of the SHA-256 hash of the access token, the hash of RS256.
+func accessTokenHash(accessToken string) string {
+	sum := sha256.Sum256([]byte(accessToken))
+	return base64.RawURLEncoding.EncodeToString(sum[:len(sum)/2])
 }
 
 // requestView is what a user is shown of a request to approve.
@@ -613,6 +674,7 @@ func (h *cibaHandler) decideEndpoint(w http.ResponseWriter, r *http.Request) {
 		req.Status = status
 		if status == ciba.Approved {
 			req.ApproverPrincipal = &principal
+			req.ApprovedAt = now
 		}
 		return nil
 	})

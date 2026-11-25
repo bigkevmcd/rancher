@@ -91,6 +91,10 @@ type Request struct {
 	LastPollAt time.Time `json:"lastPollAt"`
 	// SecretHash is the hash of the secret part of the auth_req_id, which is not stored.
 	SecretHash string `json:"secretHash"`
+
+	// ApprovedAt is when the user approved, which is the time of the authentication of the ID token
+	// (auth_time). It is zero until the request is approved.
+	ApprovedAt time.Time `json:"approvedAt"`
 }
 
 // Expired reports whether the request can't be approved or collected anymore.
