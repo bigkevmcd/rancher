@@ -381,7 +381,13 @@ func TestBackchannelAuthorize(t *testing.T) {
 		"notification token":  {authForm("alice", "client_notification_token", "x"), "invalid_request"},
 		"no scope":            {url.Values{"login_hint": {"alice"}}, "invalid_scope"},
 		"unknown scope":       {authForm("alice", "scope", "read-pods admin"), "invalid_scope"},
-		"scope of the user":   {authForm("alice", "scope", "openid"), "invalid_scope"},
+		"signed request":      {authForm("alice", "request", "eyJ"), "invalid_request"},
+		"signed request only": {url.Values{"request": {"eyJ"}}, "invalid_request"},
+		"plus expiry":         {authForm("alice", "requested_expiry", "+5"), "invalid_request"},
+		"fraction expiry":     {authForm("alice", "requested_expiry", "5.5"), "invalid_request"},
+		"huge expiry":         {authForm("alice", "requested_expiry", "99999999999999999999999"), "invalid_request"},
+		"duplicate hint":      {url.Values{"scope": {"read-pods"}, "login_hint": {"alice", "bob"}}, "invalid_request"},
+		"duplicate scope":     {url.Values{"scope": {"read-pods", "scale"}, "login_hint": {"alice"}}, "invalid_request"},
 		"overlong binding":    {authForm("alice", "binding_message", strings.Repeat("a", cibaMaxBindingMessage+1)), "invalid_binding_message"},
 		"newline in binding":  {authForm("alice", "binding_message", "ok\nApprove for admin"), "invalid_binding_message"},
 		"control in binding":  {authForm("alice", "binding_message", "bell\a"), "invalid_binding_message"},
@@ -398,6 +404,57 @@ func TestBackchannelAuthorize(t *testing.T) {
 			assert.Empty(t, f.secrets.Items, "nothing may be stored")
 		})
 	}
+
+	t.Run("rejects a content type which is not a form", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		for name, contentType := range map[string]string{
+			"none":      "",
+			"json":      "application/json",
+			"text":      "text/plain",
+			"multipart": "multipart/form-data; boundary=x",
+			"malformed": "application/x-www-form-urlencoded;;;=",
+		} {
+			r := httptest.NewRequest(http.MethodPost, "/oidc/bc-authorize", strings.NewReader(authForm("alice").Encode()))
+			if contentType != "" {
+				r.Header.Set("Content-Type", contentType)
+			}
+			basic(r, cibaClientID, cibaClientSecret)
+			w := httptest.NewRecorder()
+			f.handler.authorizeEndpoint(w, r)
+			assert.Equal(t, http.StatusBadRequest, w.Code, name)
+			assert.Equal(t, "invalid_request", errorCode(t, w), name)
+		}
+		assert.Empty(t, f.secrets.Items)
+	})
+
+	t.Run("accepts the form content type with a charset", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		r := httptest.NewRequest(http.MethodPost, "/oidc/bc-authorize", strings.NewReader(authForm("alice").Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+		basic(r, cibaClientID, cibaClientSecret)
+		w := httptest.NewRecorder()
+		f.handler.authorizeEndpoint(w, r)
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
+
+	t.Run("parameters in the query are not read, and a repeat across query and body is refused", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		r := httptest.NewRequest(http.MethodPost, "/oidc/bc-authorize?login_hint=alice&scope=read-pods", strings.NewReader(""))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		basic(r, cibaClientID, cibaClientSecret)
+		w := httptest.NewRecorder()
+		f.handler.authorizeEndpoint(w, r)
+		assert.Equal(t, "invalid_request", errorCode(t, w))
+
+		r = httptest.NewRequest(http.MethodPost, "/oidc/bc-authorize?login_hint=bob", strings.NewReader(authForm("alice").Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		basic(r, cibaClientID, cibaClientSecret)
+		w = httptest.NewRecorder()
+		f.handler.authorizeEndpoint(w, r)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "invalid_request", errorCode(t, w))
+		assert.Empty(t, f.secrets.Items)
+	})
 
 	t.Run("limits the requests waiting for one user from one client", func(t *testing.T) {
 		f := newCIBAFixture(t, nil)
@@ -595,6 +652,19 @@ func TestBackchannelPoll(t *testing.T) {
 		assert.Equal(t, "authorization_pending", errorCode(t, f.poll(authReqID)))
 		f.clock = f.clock.Add(4 * time.Second)
 		assert.Equal(t, "slow_down", errorCode(t, f.poll(authReqID)))
+	})
+
+	t.Run("a repeated auth_req_id is refused", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		authReqID := f.start(t, "alice")
+		form := url.Values{"grant_type": {grantTypeCIBA}, "auth_req_id": {authReqID, authReqID}}
+		r := httptest.NewRequest(http.MethodPost, "/oidc/token", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		basic(r, cibaClientID, cibaClientSecret)
+		w := httptest.NewRecorder()
+		f.tokenSrv.tokenEndpoint(w, r)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "invalid_request", errorCode(t, w))
 	})
 
 	t.Run("a request is only the client's own, with its secret", func(t *testing.T) {

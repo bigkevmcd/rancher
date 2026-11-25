@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/rancher/rancher/pkg/auth/audit"
+	"maps"
 	"mime"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -100,8 +102,17 @@ func (h *cibaHandler) authorizeEndpoint(w http.ResponseWriter, r *http.Request) 
 		oidcerror.WriteError(oidcerror.InvalidRequest, "too many requests", http.StatusTooManyRequests, w)
 		return
 	}
+	// CIBA Core section 7.1: the parameters are form-urlencoded in the body of a POST.
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/x-www-form-urlencoded" {
+		oidcerror.WriteError(oidcerror.InvalidRequest, "content type must be application/x-www-form-urlencoded", http.StatusBadRequest, w)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		oidcerror.WriteError(oidcerror.InvalidRequest, "error parsing parameters from request", http.StatusBadRequest, w)
+		return
+	}
+	if name := repeatedParameter(r.Form); name != "" {
+		oidcerror.WriteError(oidcerror.InvalidRequest, fmt.Sprintf("%s is included more than once", name), http.StatusBadRequest, w)
 		return
 	}
 
@@ -132,26 +143,27 @@ func (h *cibaHandler) createRequest(r *http.Request, client *v3.OIDCClient) (*au
 		return nil, oidcerror.New(oidcerror.UnauthorizedClient, "client is not allowed to make backchannel authentication requests")
 	}
 
-	// Only login_hint is supported to name the user, and no user code.
-	for _, param := range []string{"id_token_hint", "login_hint_token", "user_code"} {
-		if r.Form.Get(param) != "" {
+	// Only login_hint is supported to name the user, and no user code, nor a signed request object, whose
+	// parameters would otherwise be ignored in favour of the unsigned ones (section 7.1.1).
+	for _, param := range []string{"id_token_hint", "login_hint_token", "user_code", "request"} {
+		if r.PostForm.Get(param) != "" {
 			return nil, oidcerror.Newf(oidcerror.InvalidRequest, "%s is not supported", param)
 		}
 	}
-	hint := r.Form.Get("login_hint")
+	hint := r.PostForm.Get("login_hint")
 	if hint == "" || len(hint) > cibaMaxLoginHint {
 		return nil, oidcerror.New(oidcerror.InvalidRequest, "missing or invalid login_hint")
 	}
-	if r.Form.Get("client_notification_token") != "" {
+	if r.PostForm.Get("client_notification_token") != "" {
 		return nil, oidcerror.New(oidcerror.InvalidRequest, "client_notification_token is not supported, only poll mode is")
 	}
 
-	scopes, rules, oidcErr := resolveScopes(config, r.Form.Get("scope"))
+	scopes, rules, oidcErr := resolveScopes(config, r.PostForm.Get("scope"))
 	if oidcErr != nil {
 		return nil, oidcErr
 	}
 
-	message := r.Form.Get("binding_message")
+	message := r.PostForm.Get("binding_message")
 	if !validBindingMessage(message) {
 		return nil, oidcerror.New(oidcerror.InvalidBindingMessage, "binding_message is too long or has characters which can't be shown")
 	}
@@ -160,13 +172,14 @@ func (h *cibaHandler) createRequest(r *http.Request, client *v3.OIDCClient) (*au
 	if expiry <= 0 || expiry > cibaMaxExpiry {
 		expiry = cibaDefaultExpiry
 	}
-	if requested := r.Form.Get("requested_expiry"); requested != "" {
-		seconds, err := strconv.ParseInt(requested, 10, 64)
+	if requested := r.PostForm.Get("requested_expiry"); requested != "" {
+		// A positive integer: no sign, no fraction.
+		seconds, err := strconv.ParseUint(requested, 10, 63)
 		if err != nil || seconds < 1 {
 			return nil, oidcerror.New(oidcerror.InvalidRequest, "invalid requested_expiry")
 		}
 		// The client can ask for less time than the configured one, not more.
-		expiry = min(expiry, seconds)
+		expiry = min(expiry, int64(seconds))
 	}
 
 	ttl := config.TokenExpirationSeconds
@@ -224,6 +237,17 @@ func (h *cibaHandler) createRequest(r *http.Request, client *v3.OIDCClient) (*au
 		ExpiresIn: expiry,
 		Interval:  cibaDefaultInterval,
 	}, nil
+}
+
+// repeatedParameter returns the name of a parameter included more than once, which RFC 6749 and CIBA
+// Core section 13 make an invalid request, or the empty string if there is none.
+func repeatedParameter(form url.Values) string {
+	for _, name := range slices.Sorted(maps.Keys(form)) {
+		if len(form[name]) > 1 {
+			return name
+		}
+	}
+	return ""
 }
 
 // agentName is the name of the agent of the client in audit records.
@@ -357,6 +381,10 @@ func (h *cibaHandler) handleToken(w http.ResponseWriter, r *http.Request) {
 
 func (h *cibaHandler) poll(r *http.Request, client *v3.OIDCClient) (*cibaTokenResponse, *oidcerror.Error) {
 	invalid := oidcerror.New(oidcerror.InvalidGrant, "auth_req_id is not valid")
+
+	if name := repeatedParameter(r.Form); name != "" {
+		return nil, oidcerror.Newf(oidcerror.InvalidRequest, "%s is included more than once", name)
+	}
 
 	id, secret, ok := ciba.ParseAuthReqID(r.Form.Get("auth_req_id"))
 	if !ok {
