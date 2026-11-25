@@ -351,7 +351,7 @@ func TestBackchannelAuthorize(t *testing.T) {
 	t.Run("a client without backchannel configuration is refused", func(t *testing.T) {
 		f := newCIBAFixture(t, func(c *v3.OIDCClient) { c.Spec.Backchannel = nil })
 		w := f.authorize(authForm("alice"))
-		assert.Equal(t, http.StatusForbidden, w.Code)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "CIBA Core section 13: unauthorized_client is 400")
 		assert.Equal(t, "unauthorized_client", errorCode(t, w))
 		assert.Empty(t, f.secrets.Items)
 	})
@@ -436,6 +436,48 @@ func TestBackchannelAuthorize(t *testing.T) {
 		assert.Equal(t, http.StatusOK, f.authorize(authForm("alice")).Code)
 		assert.Equal(t, http.StatusTooManyRequests, f.authorize(authForm("bob")).Code)
 	})
+}
+
+func TestClientAuthStatus(t *testing.T) {
+	for code, want := range map[string]int{
+		oidcerror.InvalidClient:      http.StatusUnauthorized,
+		oidcerror.ServerError:        http.StatusInternalServerError,
+		oidcerror.InvalidRequest:     http.StatusBadRequest,
+		oidcerror.UnauthorizedClient: http.StatusBadRequest,
+	} {
+		assert.Equal(t, want, clientAuthStatus(oidcerror.New(code, "x")), code)
+	}
+}
+
+func TestBackchannelErrorStatuses(t *testing.T) {
+	// The statuses of CIBA Core section 13 and the token errors of section 11 and RFC 8628.
+	f := newCIBAFixture(t, nil)
+	authReqID := f.start(t, "alice")
+
+	for name, test := range map[string]struct {
+		w    *httptest.ResponseRecorder
+		code string
+	}{
+		"authorization_pending": {f.poll(authReqID), "authorization_pending"},
+		"slow_down":             {f.poll(authReqID), "slow_down"},
+		"invalid_grant":         {f.poll("ciba-0000000000000000.x"), "invalid_grant"},
+		"invalid_scope":         {f.authorize(authForm("alice", "scope", "nope")), "invalid_scope"},
+		"invalid_binding":       {f.authorize(authForm("alice", "binding_message", "a\nb")), "invalid_binding_message"},
+	} {
+		assert.Equal(t, http.StatusBadRequest, test.w.Code, name)
+		assert.Equal(t, test.code, errorCode(t, test.w), name)
+	}
+
+	f.clock = f.clock.Add(121 * time.Second)
+	w := f.poll(authReqID)
+	assert.Equal(t, http.StatusBadRequest, w.Code, "expired_token")
+	assert.Equal(t, "expired_token", errorCode(t, w))
+
+	denied := f.start(t, "bob")
+	require.Equal(t, http.StatusNoContent, f.decide("user-2", idOf(denied), "application/json", `{"decision":"deny"}`).Code)
+	w = f.poll(denied)
+	assert.Equal(t, http.StatusBadRequest, w.Code, "access_denied")
+	assert.Equal(t, "access_denied", errorCode(t, w))
 }
 
 func TestBackchannelPoll(t *testing.T) {

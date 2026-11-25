@@ -107,18 +107,17 @@ func (h *cibaHandler) authorizeEndpoint(w http.ResponseWriter, r *http.Request) 
 
 	client, oidcErr := h.clients.authenticateClient(r, true)
 	if oidcErr != nil {
-		h.writeError(w, oidcErr, http.StatusUnauthorized)
+		h.writeError(w, oidcErr, clientAuthStatus(oidcErr))
 		return
 	}
 
 	resp, oidcErr := h.createRequest(r, client)
 	if oidcErr != nil {
+		// CIBA Core section 13: every error of the authentication request is 400, but invalid_client
+		// (401, only when client authentication failed) and access_denied (403, which is not returned here).
 		status := http.StatusBadRequest
-		switch oidcErr.Error {
-		case oidcerror.ServerError:
+		if oidcErr.Error == oidcerror.ServerError {
 			status = http.StatusInternalServerError
-		case oidcerror.UnauthorizedClient:
-			status = http.StatusForbidden
 		}
 		h.writeError(w, oidcErr, status)
 		return
@@ -340,7 +339,7 @@ type cibaTokenResponse struct {
 func (h *cibaHandler) handleToken(w http.ResponseWriter, r *http.Request) {
 	client, oidcErr := h.clients.authenticateClient(r, false)
 	if oidcErr != nil {
-		h.writeError(w, oidcErr, http.StatusUnauthorized)
+		h.writeError(w, oidcErr, clientAuthStatus(oidcErr))
 		return
 	}
 
@@ -622,6 +621,18 @@ func (h *cibaHandler) authenticateUser(w http.ResponseWriter, r *http.Request) (
 		PrincipalType: p.PrincipalType,
 		Provider:      p.Provider,
 	}, true
+}
+
+// clientAuthStatus is the HTTP status of a failure to authenticate the client: 401 for failed
+// authentication (invalid_client), and not for anything else, such as a failure of the server.
+func clientAuthStatus(oidcErr *oidcerror.Error) int {
+	switch oidcErr.Error {
+	case oidcerror.InvalidClient:
+		return http.StatusUnauthorized
+	case oidcerror.ServerError:
+		return http.StatusInternalServerError
+	}
+	return http.StatusBadRequest
 }
 
 func (h *cibaHandler) writeError(w http.ResponseWriter, oidcErr *oidcerror.Error, status int) {
