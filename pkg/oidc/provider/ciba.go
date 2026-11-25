@@ -457,6 +457,7 @@ func (h *cibaHandler) issue(req *ciba.Request) (resp *cibaTokenResponse, oidcErr
 		TTL:         req.TokenTTLSeconds * 1000,
 		Description: fmt.Sprintf("Approved backchannel request %s", req.ID),
 		Labels:      map[string]string{"cattle.io/backchannel-request": req.ID},
+		Principal:   req.ApproverPrincipal,
 	})
 	if err != nil {
 		if apierrors.IsBadRequest(err) {
@@ -495,7 +496,7 @@ type requestView struct {
 
 // listEndpoint lists the requests waiting for the user who asks.
 func (h *cibaHandler) listEndpoint(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.authenticateUser(w, r)
+	userID, _, ok := h.authenticateUser(w, r)
 	if !ok {
 		return
 	}
@@ -545,7 +546,7 @@ type decision struct {
 // decideEndpoint approves or denies a request. Only the user the request asks can decide, and only
 // while it waits. Anything else is "not found", so requests of other users aren't revealed.
 func (h *cibaHandler) decideEndpoint(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.authenticateUser(w, r)
+	userID, principal, ok := h.authenticateUser(w, r)
 	if !ok {
 		return
 	}
@@ -578,6 +579,9 @@ func (h *cibaHandler) decideEndpoint(w http.ResponseWriter, r *http.Request) {
 			return errNotApprovable
 		}
 		req.Status = status
+		if status == ciba.Approved {
+			req.ApproverPrincipal = &principal
+		}
 		return nil
 	})
 	if err != nil {
@@ -597,20 +601,27 @@ func (h *cibaHandler) decideEndpoint(w http.ResponseWriter, r *http.Request) {
 // authenticateUser returns the user making the request, who must present a login token in the
 // Authorization header. Cookies are not accepted, which would let another site act for the user, and
 // neither are API keys or agent tokens: an agent can't approve its own requests.
-func (h *cibaHandler) authenticateUser(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (h *cibaHandler) authenticateUser(w http.ResponseWriter, r *http.Request) (string, ext.TokenPrincipal, bool) {
 	auth := r.Header.Get("Authorization")
 	if len(auth) < 7 || !strings.EqualFold(auth[:7], "bearer ") {
 		oidcerror.WriteError(oidcerror.InvalidRequest, "must authenticate", http.StatusUnauthorized, w)
-		return "", false
+		return "", ext.TokenPrincipal{}, false
 	}
 	token, err := h.verifyUser(r)
 	if err != nil {
 		logrus.Debugf("[OIDC provider] backchannel approval authentication failed: %v", err)
 		oidcerror.WriteError(oidcerror.InvalidRequest, "must authenticate", http.StatusUnauthorized, w)
-		return "", false
+		return "", ext.TokenPrincipal{}, false
 	}
 	audit.SetUserID(r.Context(), token.GetUserID())
-	return token.GetUserID(), true
+	p := token.GetUserPrincipal()
+	return token.GetUserID(), ext.TokenPrincipal{
+		Name:          p.Name,
+		DisplayName:   p.DisplayName,
+		LoginName:     p.LoginName,
+		PrincipalType: p.PrincipalType,
+		Provider:      p.Provider,
+	}, true
 }
 
 func (h *cibaHandler) writeError(w http.ResponseWriter, oidcErr *oidcerror.Error, status int) {

@@ -73,6 +73,10 @@ type Request struct {
 	Rules     []ext.TokenAgentRule `json:"rules"`
 	// TokenTTLSeconds is the lifetime of the token.
 	TokenTTLSeconds int64 `json:"tokenTTLSeconds"`
+	// ApproverPrincipal is the principal of the user's login token when they approved. The token
+	// is issued with it, so that it has the permissions the user has through their auth provider,
+	// such as those of their groups. It is empty until the request is approved.
+	ApproverPrincipal *ext.TokenPrincipal `json:"approverPrincipal,omitempty"`
 	// BindingMessage is shown to the user to tie the approval to what the agent is doing.
 	BindingMessage string `json:"bindingMessage,omitempty"`
 

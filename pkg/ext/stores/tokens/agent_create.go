@@ -22,12 +22,16 @@ type AgentTokenRequest struct {
 	TTL int64
 	// Description is shown with the token.
 	Description string
+	// Principal is the principal the token is issued with, which decides the permissions the user
+	// has through their auth provider, such as those of their groups. It is the principal of a
+	// login token of the user. Without it the token gets the user's local principal.
+	Principal *ext.TokenPrincipal
 	// Labels are added to the token, e.g. to find the tokens issued for a trust.
 	Labels map[string]string
 }
 
 // CreateAgentToken creates an agent token for the user and returns it with its value, which is only
-// ever available here. The token is owned by the user's local principal. Disabled and system users
+// ever available here. The token has the principal of the request, otherwise the user's local principal. Disabled and system users
 // are refused.
 func (t *SystemStore) CreateAgentToken(req AgentTokenRequest) (*ext.Token, error) {
 	if err := ValidateAgent(KindAgent, &req.Agent); err != nil {
@@ -53,21 +57,30 @@ func (t *SystemStore) CreateAgentToken(req AgentTokenRequest) (*ext.Token, error
 		return nil, err
 	}
 
+	principal := ext.TokenPrincipal{
+		Name:          "local://" + req.UserID,
+		DisplayName:   user.DisplayName,
+		LoginName:     user.Username,
+		PrincipalType: "user",
+		Provider:      "local",
+	}
+	if p := req.Principal; p != nil {
+		// A token that can't be read back must not be written.
+		if p.Name == "" || p.Provider == "" {
+			return nil, apierrors.NewBadRequest("principal requires a name and a provider")
+		}
+		principal = *p
+	}
+
 	token := &ext.Token{
 		ObjectMeta: metav1.ObjectMeta{Labels: req.Labels},
 		Spec: ext.TokenSpec{
-			UserID: req.UserID,
-			UserPrincipal: ext.TokenPrincipal{
-				Name:          "local://" + req.UserID,
-				DisplayName:   user.DisplayName,
-				LoginName:     user.Username,
-				PrincipalType: "user",
-				Provider:      "local",
-			},
-			Kind:        KindAgent,
-			Description: req.Description,
-			TTL:         req.TTL,
-			Agent:       &req.Agent,
+			UserID:        req.UserID,
+			UserPrincipal: principal,
+			Kind:          KindAgent,
+			Description:   req.Description,
+			TTL:           req.TTL,
+			Agent:         &req.Agent,
 		},
 		Status: ext.TokenStatus{
 			Hash:           hashedValue,

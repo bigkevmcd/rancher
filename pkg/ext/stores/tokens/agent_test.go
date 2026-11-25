@@ -329,6 +329,30 @@ func TestSystemStoreCreateAgentToken(t *testing.T) {
 			timer, hasher, NewMockauthHandler(ctrl))
 	}
 
+	t.Run("uses the principal of the request", func(t *testing.T) {
+		var created corev1.Secret
+		store := newStore(t, &v3.User{Username: "alice", DisplayName: "Alice"}, &created)
+		token, err := store.CreateAgentToken(AgentTokenRequest{
+			UserID: "u-1",
+			Agent:  *validAgent(),
+			Principal: &ext.TokenPrincipal{Name: "github_user://42", Provider: "github", LoginName: "alice",
+				PrincipalType: "user"},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "github_user://42", token.Spec.UserPrincipal.Name)
+		assert.Equal(t, "github", token.Spec.UserPrincipal.Provider)
+	})
+
+	t.Run("a principal without name or provider is refused", func(t *testing.T) {
+		var created corev1.Secret
+		store := newStore(t, &v3.User{Username: "alice"}, &created)
+		for _, p := range []ext.TokenPrincipal{{Name: "x"}, {Provider: "github"}} {
+			_, err := store.CreateAgentToken(AgentTokenRequest{UserID: "u-1", Agent: *validAgent(), Principal: &p})
+			require.Error(t, err)
+			assert.True(t, apierrors.IsBadRequest(err))
+		}
+	})
+
 	t.Run("creates a token owned by the user's local principal", func(t *testing.T) {
 		var created corev1.Secret
 		store := newStore(t, &v3.User{Username: "alice", DisplayName: "Alice"}, &created)

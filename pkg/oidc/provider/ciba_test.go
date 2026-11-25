@@ -130,7 +130,10 @@ func newCIBAFixture(t *testing.T, mutateClient func(c *v3.OIDCClient)) *cibaFixt
 		}
 		switch token {
 		case "user-1":
-			return &ext.Token{Spec: ext.TokenSpec{UserID: "u-1"}}, nil
+			return &ext.Token{Spec: ext.TokenSpec{UserID: "u-1", UserPrincipal: ext.TokenPrincipal{
+				Name: "github_user://42", Provider: "github", LoginName: "alice", DisplayName: "Alice",
+				PrincipalType: "user", ExtraInfo: map[string]string{"secretish": "x"},
+			}}}, nil
 		case "user-2":
 			return &ext.Token{Spec: ext.TokenSpec{UserID: "u-2"}}, nil
 		}
@@ -785,4 +788,23 @@ func TestValidBindingMessage(t *testing.T) {
 	} {
 		assert.Equal(t, want, validBindingMessage(message), "%q", message)
 	}
+}
+
+// The token has the principal of the login token that approved, so that the user's permissions
+// through their auth provider, such as their groups, apply to the agent.
+func TestBackchannelTokenPrincipal(t *testing.T) {
+	f := newCIBAFixture(t, nil)
+	id := f.start(t, "alice")
+	require.Equal(t, http.StatusNoContent, f.approve("user-1", idOf(id)).Code)
+	f.clock = f.clock.Add(10 * time.Second)
+	require.Equal(t, http.StatusOK, f.poll(id).Code)
+
+	require.Len(t, f.creator.requests, 1)
+	p := f.creator.requests[0].Principal
+	require.NotNil(t, p)
+	assert.Equal(t, "github_user://42", p.Name)
+	assert.Equal(t, "github", p.Provider)
+	assert.Equal(t, "alice", p.LoginName)
+	assert.Equal(t, "user", p.PrincipalType)
+	assert.Empty(t, p.ExtraInfo, "extra info is not copied")
 }
