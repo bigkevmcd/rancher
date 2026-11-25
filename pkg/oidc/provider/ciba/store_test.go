@@ -289,7 +289,7 @@ func TestStoreRemoveExpired(t *testing.T) {
 		return r
 	}
 	live := add(now.Add(time.Minute))
-	justExpired := add(now.Add(-30 * time.Second)) // kept a while, so its client learns it expired
+	justExpired := add(now.Add(-retention / 2)) // kept a while, so its client learns it expired
 	old := add(now.Add(-2 * retention))
 
 	store.removeExpired()

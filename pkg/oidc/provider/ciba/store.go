@@ -36,8 +36,10 @@ const (
 
 	dataKey = "request"
 
-	// retention is how long an expired request is kept, so that its client learns it expired.
-	retention = time.Minute
+	// retention is how long an expired request is kept, so that its client learns it expired when it
+	// polls again (expired_token, not invalid_grant). It bounds the growth of the store: with the cleanup
+	// interval, a request is gone at most retention plus that interval after it expired.
+	retention = 5 * time.Minute
 )
 
 // Status is the state of a request.

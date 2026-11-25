@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -606,7 +607,33 @@ func TestBackchannelPoll(t *testing.T) {
 		w := f.poll(authReqID)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Equal(t, "expired_token", errorCode(t, w))
-		assert.Equal(t, "invalid_grant", errorCode(t, f.poll(authReqID)))
+		assert.Equal(t, "expired_token", errorCode(t, f.poll(authReqID)), "a client polling again still learns it")
+
+		// Only the client the request is of: another client, or a wrong secret, learns nothing.
+		f.clients.clients["client-2"] = backchannelClient("other", "client-2")
+		f.clients.secrets["client-2"] = "other-secret"
+		_, secret, _ := ciba.ParseAuthReqID(authReqID)
+		assert.Equal(t, "invalid_grant", errorCode(t, f.pollAs(authReqID, "client-2", "other-secret")))
+		assert.Equal(t, "invalid_grant", errorCode(t, f.poll(idOf(authReqID)+".x"+secret)))
+
+		// After the grace period the cleanup removes it, and it is unknown.
+		f.clock = f.clock.Add(time.Hour)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go f.store.Cleanup(ctx, time.Millisecond)
+		assert.Eventually(t, func() bool {
+			return errorCode(t, f.poll(authReqID)) == "invalid_grant"
+		}, 5*time.Second, 5*time.Millisecond)
+	})
+
+	t.Run("an approved request which was not collected in time has expired too", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		authReqID := f.start(t, "alice")
+		require.Equal(t, http.StatusNoContent, f.approve("user-1", idOf(authReqID)).Code)
+		f.clock = f.clock.Add(121 * time.Second)
+		assert.Equal(t, "expired_token", errorCode(t, f.poll(authReqID)))
+		assert.Equal(t, "expired_token", errorCode(t, f.poll(authReqID)))
+		assert.Empty(t, f.creator.requests)
 	})
 
 	t.Run("an approval after expiry is refused", func(t *testing.T) {

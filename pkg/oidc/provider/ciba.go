@@ -406,8 +406,10 @@ func (h *cibaHandler) poll(r *http.Request, client *v3.OIDCClient) (*cibaTokenRe
 		}
 
 		now := h.now()
+		// An expired request is kept, and not deleted here, so that a client which polls again learns it
+		// expired and not that the request is unknown. The store removes it after a grace period. The
+		// client and secret were checked above, so this tells nothing to others.
 		if req.Expired(now) {
-			_ = h.store.Delete(req.ID)
 			return nil, oidcerror.New(oidcerror.ExpiredToken, "the request has expired")
 		}
 
