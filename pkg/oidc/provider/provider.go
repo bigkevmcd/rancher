@@ -87,7 +87,7 @@ func NewProvider(ctx context.Context, extTokenStore *exttokenstore.SystemStore, 
 
 	cibaStore := ciba.NewStore(secretClient, secretCache)
 	go cibaStore.Cleanup(ctx, cibaCleanupInterval, cibaEnabled)
-	cibaHandler := newCIBAHandler(cibaStore, tokenHandler, userLister, oidcClientCache, extTokenStore,
+	cibaHandler := newCIBAHandler(cibaStore, tokenHandler, newUserResolver(userLister), oidcClientCache, extTokenStore,
 		// Approving takes a login token, which is what the authorize endpoint accepts too.
 		authHandler.getAndVerifyRancherTokenFromRequest)
 	tokenHandler.ciba = cibaHandler

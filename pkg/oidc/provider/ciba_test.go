@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -146,7 +147,7 @@ func newCIBAFixture(t *testing.T, mutateClient func(c *v3.OIDCClient)) *cibaFixt
 		}
 		return nil, fmt.Errorf("invalid token")
 	}
-	f.handler = newCIBAHandler(f.store, clients, users, oidcCache, f.creator, verify)
+	f.handler = newCIBAHandler(f.store, clients, newUserResolver(users), oidcCache, f.creator, verify)
 	f.handler.limiter = rate.NewLimiter(rate.Inf, 1)
 	f.handler.now = clock
 	f.handler.signIDToken = func(claims jwt.MapClaims) (string, error) {
@@ -1248,4 +1249,47 @@ func TestSignIDTokenClaims(t *testing.T) {
 
 	_, err = (&tokenHandler{jwks: fixedKeyGetter{err: fmt.Errorf("no key")}}).signIDTokenClaims(claims)
 	assert.Error(t, err)
+}
+
+// fakeResolver is a userResolver which names users by a fixed table.
+type fakeResolver struct {
+	byHint map[string]string
+	err    error
+	hints  []string
+}
+
+func (r *fakeResolver) ResolveUser(hint string) (string, error) {
+	r.hints = append(r.hints, hint)
+	return r.byHint[hint], r.err
+}
+
+// The handler asks its resolver, and only it, who is asked to approve: another resolver can change what a
+// hint means without anything else changing.
+func TestBackchannelUsesTheUserResolver(t *testing.T) {
+	t.Run("a request is for the user the resolver names", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		resolver := &fakeResolver{byHint: map[string]string{"alice@example.com": "u-1"}}
+		f.handler.resolver = resolver
+
+		id := f.start(t, "alice@example.com") // not a name the default resolver knows
+		assert.Equal(t, "u-1", f.request(t, id).UserID)
+		assert.Equal(t, []string{"alice@example.com"}, resolver.hints)
+	})
+
+	t.Run("a hint nobody is named by gives a request nobody can approve", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		f.handler.resolver = &fakeResolver{}
+
+		id := f.start(t, "alice") // the default resolver would have named u-1
+		assert.Empty(t, f.request(t, id).UserID)
+	})
+
+	t.Run("a failed lookup is a server error", func(t *testing.T) {
+		f := newCIBAFixture(t, nil)
+		f.handler.resolver = &fakeResolver{err: errors.New("cache down")}
+
+		w := f.authorize(authForm("alice"))
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Contains(t, w.Body.String(), "server_error")
+	})
 }

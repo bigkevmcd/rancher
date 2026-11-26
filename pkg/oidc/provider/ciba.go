@@ -72,9 +72,10 @@ type userTokenVerifier func(r *http.Request) (accessor.TokenAccessor, error)
 type cibaHandler struct {
 	store   *ciba.Store
 	clients clientAuthenticator
-	users   wrangmgmtv3.UserCache
-	oidc    wrangmgmtv3.OIDCClientCache
-	tokens  agentTokenCreator
+	// resolver turns the login_hint into the user asked to approve.
+	resolver userResolver
+	oidc     wrangmgmtv3.OIDCClientCache
+	tokens   agentTokenCreator
 	// signIDToken signs the claims of an ID token. Without it, a request for the openid scope can't be
 	// collected.
 	signIDToken func(claims jwt.MapClaims) (string, error)
@@ -85,12 +86,12 @@ type cibaHandler struct {
 	now     func() time.Time
 }
 
-func newCIBAHandler(store *ciba.Store, clients clientAuthenticator, users wrangmgmtv3.UserCache,
+func newCIBAHandler(store *ciba.Store, clients clientAuthenticator, resolver userResolver,
 	oidc wrangmgmtv3.OIDCClientCache, tokens agentTokenCreator, verifyUser userTokenVerifier) *cibaHandler {
 	return &cibaHandler{
 		store:      store,
 		clients:    clients,
-		users:      users,
+		resolver:   resolver,
 		oidc:       oidc,
 		tokens:     tokens,
 		verifyUser: verifyUser,
@@ -205,7 +206,7 @@ func (h *cibaHandler) createRequest(r *http.Request, client *v3.OIDCClient) (*au
 		return nil, oidcerror.New(oidcerror.ServerError, "the client is not configured correctly")
 	}
 
-	userID, err := h.resolveUser(hint)
+	userID, err := h.resolver.ResolveUser(hint)
 	if err != nil {
 		logrus.Errorf("[OIDC provider] failed to look up user for backchannel request: %v", err)
 		return nil, oidcerror.New(oidcerror.ServerError, "failed to look up the user")
@@ -316,30 +317,6 @@ func validBindingMessage(message string) bool {
 		}
 	}
 	return true
-}
-
-// resolveUser returns the ID of the user a login_hint names, which is the user's ID or username, or
-// the empty string if there is no such user, or it isn't one who may approve. A username two users
-// have names no one.
-func (h *cibaHandler) resolveUser(hint string) (string, error) {
-	users, err := h.users.List(labels.Everything())
-	if err != nil {
-		return "", err
-	}
-	var found []*v3.User
-	for _, u := range users {
-		if u.Name == hint || u.Username == hint {
-			found = append(found, u)
-		}
-	}
-	if len(found) != 1 {
-		return "", nil
-	}
-	user := found[0]
-	if (user.Enabled != nil && !*user.Enabled) || user.IsSystem() {
-		return "", nil
-	}
-	return user.Name, nil
 }
 
 // checkCaps limits the requests waiting for approval, so that a client can't flood a user with
